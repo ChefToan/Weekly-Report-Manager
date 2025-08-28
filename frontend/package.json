@@ -1,0 +1,38 @@
+{
+  "name": "weekly-report-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/auth-helpers-nextjs": "^0.8.7",
+    "@supabase/supabase-js": "^2.39.0",
+    "@types/bcryptjs": "^2.4.6",
+    "autoprefixer": "^10.4.21",
+    "bcryptjs": "^3.0.2",
+    "date-fns": "^3.6.0",
+    "greet-by-time": "^1.0.1",
+    "lucide-react": "^0.447.0",
+    "next": "15.5.0",
+    "papaparse": "^5.4.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/typography": "^0.5.16",
+    "@types/node": "^20",
+    "@types/papaparse": "^5.3.14",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.0",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5"
+  }
+}

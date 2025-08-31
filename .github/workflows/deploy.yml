@@ -1,0 +1,101 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install dependencies
+      run: |
+        cd frontend
+        npm ci
+
+    - name: Build application
+      run: |
+        cd frontend
+        npm run build
+
+    - name: Run tests (if any)
+      run: |
+        cd frontend
+        npm run lint
+        npm run type-check
+
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ubuntu
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: ${{ secrets.SERVER_PORT }}
+        script: |
+          set -e
+          
+          # Navigate to application directory
+          cd /home/ubuntu/weekly-report-site
+          
+          # Create backup
+          echo "Creating backup..."
+          mkdir -p /home/ubuntu/backups
+          tar -czf /home/ubuntu/backups/backup-$(date +%Y%m%d_%H%M%S).tar.gz -C /home/ubuntu weekly-report-site
+          
+          # Keep only last 5 backups
+          find /home/ubuntu/backups -name "backup-*.tar.gz" -type f | sort -r | tail -n +6 | xargs -r rm
+          
+          # Pull latest code
+          echo "Pulling latest code..."
+          git fetch origin
+          git reset --hard origin/main
+          
+          # Install dependencies and build
+          echo "Installing dependencies..."
+          cd frontend
+          npm ci
+          
+          echo "Building application..."
+          npm run build
+          
+          # Restart application
+          echo "Restarting application..."
+          pm2 restart weeklyreport || pm2 start ecosystem.config.js
+          
+          # Verify deployment
+          echo "Verifying deployment..."
+          pm2 status
+          
+          # Test health check (wait for app to start)
+          sleep 10
+          if curl -f -s http://localhost:3000 > /dev/null; then
+            echo "✅ Deployment successful! Application is responding."
+          else
+            echo "❌ Warning: Application may not be responding correctly."
+            pm2 logs --lines 20
+            exit 1
+          fi
+          
+          echo "🚀 Deployment completed successfully!"
+
+    - name: Notify on success
+      if: success()
+      run: |
+        echo "✅ Deployment to weeklyreport.info completed successfully!"
+        
+    - name: Notify on failure
+      if: failure()
+      run: |
+        echo "❌ Deployment failed! Check the logs above."

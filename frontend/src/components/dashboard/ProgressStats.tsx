@@ -45,7 +45,7 @@ export default function ProgressStats() {
         const data = await response.json();
         setStats(data);
       }
-    } catch (error) {
+    } catch {
       console.error('Error fetching stats:', error);
     } finally {
       setLoading(false);

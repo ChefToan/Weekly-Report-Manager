@@ -38,7 +38,7 @@ export default function UserList() {
       } else {
         setError('Failed to load users');
       }
-    } catch (err) {
+    } catch {
       setError('Network error occurred');
     } finally {
       setLoading(false);

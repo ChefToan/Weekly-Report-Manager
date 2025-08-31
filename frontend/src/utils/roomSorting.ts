@@ -80,7 +80,7 @@ export function sortResidentsNeedingAttentionByRoom(
   interactionsPerResident: { [key: string]: number }
 ): Array<[string, number, { name: string; room: string }]> {
   return Object.entries(interactionsPerResident)
-    .filter(([_, count]) => count < 3)
+    .filter(([, count]) => count < 3)
     .map(([emplId, count]) => [emplId, count, residentsData[emplId]] as [string, number, { name: string; room: string }])
     .sort(([, , a], [, , b]) => compareRooms(a?.room, b?.room));
 }

@@ -47,7 +47,7 @@ export default function UserManagement() {
       } else {
         setError('Failed to load registration codes');
       }
-    } catch (err) {
+    } catch {
       setError('Network error occurred');
     } finally {
       setLoading(false);
@@ -75,7 +75,7 @@ export default function UserManagement() {
         const error = await response.json();
         setError(error.error || 'Failed to create registration code');
       }
-    } catch (err) {
+    } catch {
       setError('Network error occurred');
     } finally {
       setCreating(false);
@@ -98,7 +98,7 @@ export default function UserManagement() {
       } else {
         setError('Failed to delete registration code');
       }
-    } catch (err) {
+    } catch {
       setError('Network error occurred');
     }
   };
@@ -108,7 +108,7 @@ export default function UserManagement() {
       await navigator.clipboard.writeText(code);
       setCopiedCode(code);
       setTimeout(() => setCopiedCode(''), 2000);
-    } catch (err) {
+    } catch {
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = code;

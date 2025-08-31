@@ -99,7 +99,7 @@ export default function FriendlyGreeting({ firstName }: FriendlyGreetingProps) {
           return;
         }
       }
-    } catch (e) {
+    } catch {
       // If localStorage fails, just continue with new greeting
     }
 
@@ -113,7 +113,7 @@ export default function FriendlyGreeting({ firstName }: FriendlyGreetingProps) {
         period: currentPeriod,
         greeting: newGreeting
       }));
-    } catch (e) {
+    } catch {
       // If localStorage fails, continue without saving
     }
   }, [firstName]);

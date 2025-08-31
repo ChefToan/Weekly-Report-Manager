@@ -88,7 +88,7 @@ export default function ResetPasswordPage() {
       } else {
         setError(data.error || 'Failed to update password');
       }
-    } catch (err) {
+    } catch {
       setError('Network error occurred. Please try again.');
     } finally {
       setLoading(false);

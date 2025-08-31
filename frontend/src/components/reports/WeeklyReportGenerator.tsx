@@ -62,7 +62,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       if (saved) {
         try {
           return JSON.parse(saved);
-        } catch (e) {
+        } catch {
           return null;
         }
       }
@@ -147,7 +147,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         }));
         setAllUnsubmittedInteractions(transformedData);
       }
-    } catch (error) {
+    } catch {
       console.error('Error fetching unsubmitted interactions:', error);
     }
   };
@@ -162,7 +162,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       } else {
         alert('Error generating report');
       }
-    } catch (error) {
+    } catch {
       alert('Network error occurred');
     } finally {
       setLoading(false);
@@ -178,13 +178,13 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     setLoading(true);
     try {
       // Create a custom report with selected interactions
-      const selectedInteractionsList = allUnsubmittedInteractions.filter(interaction => 
+      const selectedInteractionsList = allUnsubmittedInteractions.filter(interaction =>
         interaction.id && selectedInteractions.has(interaction.id)
       );
 
       // Group by required (3 per resident) and additional
       const residentsWithInteractions = new Map<string, ReportInteraction[]>();
-      
+
       selectedInteractionsList.forEach(interaction => {
         const key = interaction.residentId;
         if (!residentsWithInteractions.has(key)) {
@@ -199,7 +199,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       residentsWithInteractions.forEach((interactions, residentId) => {
         // Sort by date to get most recent first
         interactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        
+
         // First 3 are required, rest are additional
         interactions.forEach((interaction, index) => {
           if (index < 3) {
@@ -217,7 +217,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       };
 
       setReport(customReport);
-    } catch (error) {
+    } catch {
       alert('Error generating custom report');
     } finally {
       setLoading(false);
@@ -229,7 +229,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     if (!report || !report.additionalInteractions.length) return '';
 
     let text = '';
-    
+
     for (let i = 0; i < Math.min(14, report.additionalInteractions.length); i++) {
       const interaction = report.additionalInteractions[i];
       text += `Interaction ${i + 1}\n`;
@@ -351,7 +351,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       await navigator.clipboard.writeText(text);
       setCopied(type);
       setTimeout(() => setCopied(null), 2000);
-    } catch (error) {
+    } catch {
       alert('Failed to copy to clipboard');
     }
   };
@@ -387,7 +387,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       } else {
         alert('Error marking interactions as submitted');
       }
-    } catch (error) {
+    } catch {
       alert('Network error occurred');
     } finally {
       setSubmitting(false);
@@ -418,7 +418,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       } else {
         alert('Error marking interactions as submitted');
       }
-    } catch (error) {
+    } catch {
       alert('Network error occurred');
     } finally {
       setSubmitting(false);

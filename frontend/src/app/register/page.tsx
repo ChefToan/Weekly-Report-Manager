@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, AlertCircle, UserPlus, ArrowLeft, CheckCircle, Key, User, Mail, IdCard, Lock, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, UserPlus, ArrowLeft, CheckCircle, Key, User, Mail, IdCard } from 'lucide-react';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 
 export default function RegisterPage() {
@@ -122,7 +122,7 @@ export default function RegisterPage() {
       } else {
         setError(data.error || 'Registration failed');
       }
-    } catch (err) {
+    } catch {
       setError('Network error occurred. Please try again.');
     } finally {
       setLoading(false);

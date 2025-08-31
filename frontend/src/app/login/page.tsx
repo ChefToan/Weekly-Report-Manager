@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Eye, EyeOff, AlertCircle, LogIn, UserPlus, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, LogIn, UserPlus, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 
@@ -45,7 +45,7 @@ export default function LoginPage() {
       } else {
         setError(data.error || 'Login failed');
       }
-    } catch (err) {
+    } catch {
       setError('Network error occurred. Please try again.');
     } finally {
       setLoading(false);
@@ -74,7 +74,7 @@ export default function LoginPage() {
       }
       
       // Don't auto-reset the form - let user control when to go back
-    } catch (err) {
+    } catch {
       setResetMessage('Failed to send reset email. Please try again.');
     } finally {
       setResetLoading(false);

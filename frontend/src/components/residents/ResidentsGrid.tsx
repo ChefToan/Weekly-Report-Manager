@@ -1,15 +1,28 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Copy, UserPlus, Trash2, X } from 'lucide-react';
+import { Plus, Copy, UserPlus, Trash2, X, Edit3 } from 'lucide-react';
 import { sortResidentsByRoom } from '@/utils/roomSorting';
+import {
+  useFloating,
+  autoUpdate,
+  offset,
+  flip,
+  shift,
+  size,
+  useClick,
+  useDismiss,
+  useRole,
+  useInteractions,
+  FloatingPortal,
+} from '@floating-ui/react';
 
 interface Resident {
   id: string;
   name: string;
   empl_id: string;
   email?: string;
-  room?: string;
+  room?: string | null;
 }
 
 interface Interaction {
@@ -19,6 +32,7 @@ interface Interaction {
   details?: string;
   date: string;
   column?: number; // Track which column this interaction belongs to
+  is_submitted?: boolean; // Track if interaction has been submitted
 }
 
 interface InteractionFormData {
@@ -34,13 +48,96 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
   const [residents, setResidents] = useState<Resident[]>([]);
   const [interactions, setInteractions] = useState<Record<string, Interaction[]>>({});
   const [loading, setLoading] = useState(true);
-  const [showPopover, setShowPopover] = useState<{residentId: string, column: number, position: {x: number, y: number}} | null>(null);
+  const [showPopover, setShowPopover] = useState<{residentId: string, column: number} | null>(null);
   const [interactionFormData, setInteractionFormData] = useState<InteractionFormData>({
     details: '',
     date: new Date().toISOString().split('T')[0]
   });
   const [showAddResidents, setShowAddResidents] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
+  
+  // Floating UI setup
+  const { refs, floatingStyles, context } = useFloating({
+    open: !!showPopover,
+    onOpenChange: (open) => {
+      if (!open) setShowPopover(null);
+    },
+    placement: 'bottom',
+    strategy: 'fixed',
+    middleware: [
+      offset(10), // Normal spacing between button and popover
+      flip({ 
+        fallbackAxisSideDirection: "start",
+        boundary: 'clippingAncestors',
+        padding: { 
+          top: 100, // Keep below header
+          bottom: 20,
+          left: 10,
+          right: 10
+        }
+      }),
+      shift({ 
+        boundary: 'clippingAncestors',
+        padding: { 
+          top: 100, // Ensure it stays below header
+          bottom: 20,
+          left: 10,
+          right: 10
+        }
+      }),
+      size({
+        apply({ availableHeight, elements }) {
+          // Limit the popover to the area below the header
+          const headerHeight = 100; // Fixed header height + padding
+          const maxHeight = Math.max(200, availableHeight - headerHeight);
+          
+          Object.assign(elements.floating.style, {
+            maxHeight: `${maxHeight}px`,
+            overflowY: 'auto',
+          });
+        },
+      }),
+      // Custom middleware to ensure popover never goes above header and stays accessible
+      {
+        name: 'preventHeaderOverlap',
+        fn: ({ x, y, rects }) => {
+          const headerHeight = 100;
+          const minY = headerHeight + 10;
+          const viewportHeight = window.innerHeight;
+          const popoverHeight = rects.floating.height;
+          
+          // If the reference element (+ button) is above the header, 
+          // position the popover just below the header
+          if (rects.reference.y < headerHeight) {
+            return {
+              x: Math.min(Math.max(x, 10), window.innerWidth - rects.floating.width - 10),
+              y: minY,
+            };
+          }
+          
+          // If the popover would go below viewport, try to keep it visible
+          const maxY = viewportHeight - popoverHeight - 20;
+          const constrainedY = Math.max(minY, Math.min(y, maxY));
+          
+          return {
+            x: Math.min(Math.max(x, 10), window.innerWidth - rects.floating.width - 10),
+            y: constrainedY,
+          };
+        },
+      },
+    ],
+    whileElementsMounted: autoUpdate,
+  });
+
+  const click = useClick(context);
+  const dismiss = useDismiss(context);
+  const role = useRole(context);
+
+  const { getFloatingProps } = useInteractions([
+    click,
+    dismiss,
+    role,
+  ]);
+
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [addMode, setAddMode] = useState<'csv' | 'manual'>('csv');
@@ -49,6 +146,12 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
   const [expandedCells, setExpandedCells] = useState<Set<string>>(new Set());
   const [removingResidents, setRemovingResidents] = useState(false);
   const [addingInteraction, setAddingInteraction] = useState(false);
+  const [editingInteraction, setEditingInteraction] = useState<{interactionId: string, residentId: string, column: number, isSubmitted: boolean} | null>(null);
+  const [editFormData, setEditFormData] = useState<InteractionFormData>({
+    details: '',
+    date: new Date().toISOString().split('T')[0]
+  });
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const toggleCellExpansion = (cellId: string) => {
     const newExpanded = new Set(expandedCells);
@@ -75,7 +178,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
   };
 
 
-  const copyToClipboard = async (text: string, type: string) => {
+  const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
       // You could add a toast notification here
@@ -205,18 +308,27 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
     fetchInteractions();
   }, []);
 
+  // Auto-focus textarea when popover opens (for both add and edit modes)
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
-        setShowPopover(null);
-      }
-    };
-
-    if (showPopover) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+    if (showPopover || editingInteraction) {
+      // Use multiple attempts with increasing delays to ensure the popover is fully rendered
+      const focusTextarea = (attempt = 0) => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          textareaRef.current.select(); // Also select the text if editing
+        } else if (attempt < 5) {
+          // Retry with increasing delay if element is not ready
+          setTimeout(() => focusTextarea(attempt + 1), 50 + (attempt * 50));
+        }
+      };
+      
+      // Initial attempt with small delay
+      const timer = setTimeout(() => focusTextarea(), 150);
+      return () => clearTimeout(timer);
     }
-  }, [showPopover]);
+  }, [showPopover, editingInteraction]);
+
+  // Remove the old useEffect for click outside - Floating UI handles this now
 
   const fetchResidents = async () => {
     try {
@@ -225,7 +337,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
       if (response.ok) {
         const data = await response.json();
         // Sort residents by room before setting state
-        const sortedResidents = sortResidentsByRoom(data || []) as Resident[];
+        const sortedResidents = sortResidentsByRoom(data || []);
         setResidents(sortedResidents);
       } else {
         const errorData = await response.json();
@@ -258,15 +370,78 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
   };
 
   const handlePopoverClick = (residentId: string, column: number, event: React.MouseEvent) => {
-    const rect = event.currentTarget.getBoundingClientRect();
+    // Set the reference element for Floating UI
+    refs.setReference(event.currentTarget as Element);
     setShowPopover({
       residentId,
-      column,
-      position: {
-        x: rect.left + rect.width / 2,
-        y: rect.bottom + 5
-      }
+      column
     });
+  };
+
+  const handleEditInteraction = (interaction: Interaction, residentId: string, column: number, event: React.MouseEvent) => {
+    // Set the reference element for Floating UI positioning
+    refs.setReference(event.currentTarget as Element);
+    setEditingInteraction({
+      interactionId: interaction.id,
+      residentId,
+      column,
+      isSubmitted: interaction.is_submitted || false
+    });
+    setEditFormData({
+      details: interaction.details || '',
+      date: interaction.date
+    });
+  };
+
+  const handleUpdateInteraction = async (markAsSubmitted = false) => {
+    if (!editingInteraction) return;
+
+    setAddingInteraction(true);
+    try {
+      const requestBody: {
+        details: string;
+        date: string;
+        isSubmitted?: boolean;
+      } = {
+        details: editFormData.details,
+        date: editFormData.date,
+      };
+
+      // If marking as submitted, explicitly set the submission status
+      if (markAsSubmitted) {
+        requestBody.isSubmitted = true;
+      }
+
+      const response = await fetch(`/api/interactions/${editingInteraction.interactionId}`, {
+        method: markAsSubmitted ? 'PUT' : 'PATCH', // Use PUT for full updates when changing submission status
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (response.ok) {
+        await fetchInteractions();
+        onInteractionUpdate?.();
+        setEditingInteraction(null);
+        setEditFormData({
+          details: '',
+          date: new Date().toISOString().split('T')[0]
+        });
+        if (markAsSubmitted) {
+          // Show success message for submission
+          alert('Interaction updated and marked as submitted!');
+        }
+      } else {
+        const responseText = await response.text();
+        console.error('Failed to update interaction. Status:', response.status);
+        console.error('Response text:', responseText);
+      }
+    } catch (error) {
+      console.error('Error updating interaction:', error);
+    } finally {
+      setAddingInteraction(false);
+    }
   };
 
   const handleAddInteraction = async () => {
@@ -293,7 +468,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         residentEmplId: resident.empl_id,
         weekStarting: weekStartingStr,
         date: interactionFormData.date,
-        summary: 'Interaction logged',
+        summary: `${interactionFormData.details.slice(0, 100)}${interactionFormData.details.length > 100 ? '...' : ''}`,
         details: interactionFormData.details,
         column: showPopover.column // Include the column number
       };
@@ -309,7 +484,6 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
 
 
       if (response.ok) {
-        const responseData = await response.json();
         await fetchInteractions();
         onInteractionUpdate?.();
         setShowPopover(null);
@@ -371,8 +545,8 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-200">
-      <div className="p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center transition-all duration-200">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Residents interaction tracker</h2>
         <div className="flex gap-2">
           {selectedResidents.size > 0 && (
@@ -545,7 +719,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         <div className="overflow-x-auto overflow-y-visible" style={{touchAction: 'pan-x'}}>
           <table className="w-full border-collapse table-fixed min-w-[1000px]">
             <thead>
-              <tr className="bg-yellow-100 dark:bg-yellow-900/30 border-b-2 border-gray-200 dark:border-gray-600 transition-all duration-200">
+              <tr className="bg-blue-50 dark:bg-slate-700 border-b-2 border-gray-200 dark:border-gray-600">
                 <th className="border-r border-gray-300 dark:border-gray-600 p-3 text-center font-semibold text-gray-900 dark:text-gray-100 w-12">
                   <input
                     type="checkbox"
@@ -588,7 +762,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
 
                 return (
                   <React.Fragment key={resident.id}>
-                    <tr className={`group transition-all duration-200 ${index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700'} hover:bg-gray-100 dark:hover:bg-gray-600`}>
+                    <tr className={`group ${index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700'} hover:bg-gray-100 dark:hover:bg-gray-600`}>
                       <td className="border-r border-gray-300 dark:border-gray-600 p-3 text-center">
                         <input
                           type="checkbox"
@@ -601,8 +775,8 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
                         <div className="flex items-center gap-2 truncate">
                           <span className="truncate" title={resident.name}>{resident.name}</span>
                           <button
-                            onClick={() => copyToClipboard(resident.name, 'Student name')}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-all flex-shrink-0"
+                            onClick={() => copyToClipboard(resident.name)}
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded flex-shrink-0"
                             title="Copy student name"
                           >
                             <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
@@ -614,8 +788,8 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
                           <span className="truncate" title={resident.room || 'N/A'}>{resident.room || 'N/A'}</span>
                           {resident.room && (
                             <button
-                              onClick={() => copyToClipboard(resident.room!, 'Room number')}
-                              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-all flex-shrink-0"
+                              onClick={() => copyToClipboard(resident.room!)}
+                              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded flex-shrink-0"
                               title="Copy room number"
                             >
                               <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
@@ -627,8 +801,8 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
                         <div className="flex items-center gap-2 truncate">
                           <span className="truncate" title={resident.empl_id}>{resident.empl_id}</span>
                           <button
-                            onClick={() => copyToClipboard(resident.empl_id, 'Student ID')}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-all flex-shrink-0"
+                            onClick={() => copyToClipboard(resident.empl_id)}
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded flex-shrink-0"
                             title="Copy student ID"
                           >
                             <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
@@ -638,18 +812,30 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
                       
                       {/* Interaction 1 */}
                       <td className={`border-r border-gray-300 dark:border-gray-600 p-2 text-center relative group w-[200px] ${
-                        interaction1 ? 'bg-green-100 dark:bg-green-900/30' : ''
+                        interaction1 
+                          ? interaction1.is_submitted 
+                            ? 'bg-green-100 dark:bg-green-900/30'
+                            : 'bg-yellow-100 dark:bg-yellow-900/30'
+                          : ''
                       }`}>
                         {interaction1 ? (
                           <div className="relative w-full">
                             <div 
-                              className={`text-xs text-green-900 dark:text-green-100 p-2 flex flex-col justify-center relative transition-all duration-200 cursor-pointer w-full ${
+                              className={`text-xs p-2 flex flex-col justify-center relative cursor-pointer w-full ${
                                 isCellExpanded(`${resident.id}-1`) ? 'max-h-48' : 'max-h-16'
-                              } overflow-hidden`}
+                              } overflow-hidden ${
+                                interaction1.is_submitted 
+                                  ? 'text-green-900 dark:text-green-100'
+                                  : 'text-yellow-900 dark:text-yellow-100'
+                              }`}
                               onClick={() => toggleCellExpansion(`${resident.id}-1`)}
                             >
                               <div 
-                                className="text-green-900 dark:text-green-100 text-center break-all leading-relaxed w-full overflow-wrap-anywhere max-w-full"
+                                className={`text-center break-all leading-relaxed w-full overflow-wrap-anywhere max-w-full ${
+                                  interaction1.is_submitted 
+                                    ? 'text-green-900 dark:text-green-100'
+                                    : 'text-yellow-900 dark:text-yellow-100'
+                                }`}
                                 style={{wordBreak: 'break-all', overflowWrap: 'anywhere'}}
                                 title={isCellExpanded(`${resident.id}-1`) ? 'Click to collapse' : 'Click to expand full text'}
                               >
@@ -660,26 +846,57 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
                               </div>
                               {(interaction1.details || 'No details provided').length > 10 && (
                                 <span 
-                                  className="text-green-600 text-xs opacity-60 mt-1 cursor-pointer"
+                                  className={`text-xs opacity-60 mt-1 cursor-pointer ${
+                                    interaction1.is_submitted 
+                                      ? 'text-green-600 dark:text-green-400'
+                                      : 'text-yellow-600 dark:text-yellow-400'
+                                  }`}
                                   onClick={() => toggleCellExpansion(`${resident.id}-1`)}
                                 >
                                   {isCellExpanded(`${resident.id}-1`) ? 'Click to collapse' : 'Click to expand'}
                                 </span>
                               )}
                             </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                copyToClipboard(
-                                  interaction1.details || 'No details provided',
-                                  'Interaction details'
-                                );
-                              }}
-                              className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 hover:bg-green-200 dark:hover:bg-green-700 rounded transition-all z-10"
-                              title="Copy interaction details"
-                            >
-                              <Copy className="h-3 w-3 text-green-600 dark:text-green-400" />
-                            </button>
+                            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 flex gap-1 z-10">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditInteraction(interaction1, resident.id, 1, e);
+                                }}
+                                className={`p-1 rounded ${
+                                  interaction1.is_submitted 
+                                    ? 'hover:bg-green-200 dark:hover:bg-green-700'
+                                    : 'hover:bg-yellow-200 dark:hover:bg-yellow-700'
+                                }`}
+                                title="Edit interaction"
+                              >
+                                <Edit3 className={`h-3 w-3 ${
+                                  interaction1.is_submitted 
+                                    ? 'text-green-600 dark:text-green-400'
+                                    : 'text-yellow-600 dark:text-yellow-400'
+                                }`} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyToClipboard(
+                                    interaction1.details || 'No details provided'
+                                  );
+                                }}
+                                className={`p-1 rounded ${
+                                  interaction1.is_submitted 
+                                    ? 'hover:bg-green-200 dark:hover:bg-green-700'
+                                    : 'hover:bg-yellow-200 dark:hover:bg-yellow-700'
+                                }`}
+                                title="Copy interaction details"
+                              >
+                                <Copy className={`h-3 w-3 ${
+                                  interaction1.is_submitted 
+                                    ? 'text-green-600 dark:text-green-400'
+                                    : 'text-yellow-600 dark:text-yellow-400'
+                                }`} />
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           <button
@@ -693,18 +910,30 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
 
                       {/* Interaction 2 */}
                       <td className={`border-r border-gray-300 dark:border-gray-600 p-2 text-center relative group w-[200px] ${
-                        interaction2 ? 'bg-green-100 dark:bg-green-900/30' : ''
+                        interaction2 
+                          ? interaction2.is_submitted 
+                            ? 'bg-green-100 dark:bg-green-900/30'
+                            : 'bg-yellow-100 dark:bg-yellow-900/30'
+                          : ''
                       }`}>
                         {interaction2 ? (
                           <div className="relative w-full">
                             <div 
-                              className={`text-xs text-green-900 dark:text-green-100 p-2 flex flex-col justify-center relative transition-all duration-200 cursor-pointer w-full ${
+                              className={`text-xs p-2 flex flex-col justify-center relative cursor-pointer w-full ${
                                 isCellExpanded(`${resident.id}-2`) ? 'max-h-48' : 'max-h-16'
-                              } overflow-hidden`}
+                              } overflow-hidden ${
+                                interaction2.is_submitted 
+                                  ? 'text-green-900 dark:text-green-100'
+                                  : 'text-yellow-900 dark:text-yellow-100'
+                              }`}
                               onClick={() => toggleCellExpansion(`${resident.id}-2`)}
                             >
                               <div 
-                                className="text-green-900 dark:text-green-100 text-center break-all leading-relaxed w-full overflow-wrap-anywhere max-w-full"
+                                className={`text-center break-all leading-relaxed w-full overflow-wrap-anywhere max-w-full ${
+                                  interaction2.is_submitted 
+                                    ? 'text-green-900 dark:text-green-100'
+                                    : 'text-yellow-900 dark:text-yellow-100'
+                                }`}
                                 style={{wordBreak: 'break-all', overflowWrap: 'anywhere'}}
                                 title={isCellExpanded(`${resident.id}-2`) ? 'Click to collapse' : 'Click to expand full text'}
                               >
@@ -715,26 +944,57 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
                               </div>
                               {(interaction2.details || 'No details provided').length > 10 && (
                                 <span 
-                                  className="text-green-600 text-xs opacity-60 mt-1 cursor-pointer"
+                                  className={`text-xs opacity-60 mt-1 cursor-pointer ${
+                                    interaction2.is_submitted 
+                                      ? 'text-green-600 dark:text-green-400'
+                                      : 'text-yellow-600 dark:text-yellow-400'
+                                  }`}
                                   onClick={() => toggleCellExpansion(`${resident.id}-2`)}
                                 >
                                   {isCellExpanded(`${resident.id}-2`) ? 'Click to collapse' : 'Click to expand'}
                                 </span>
                               )}
                             </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                copyToClipboard(
-                                  interaction2.details || 'No details provided',
-                                  'Interaction details'
-                                );
-                              }}
-                              className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 hover:bg-green-200 dark:hover:bg-green-700 rounded transition-all z-10"
-                              title="Copy interaction details"
-                            >
-                              <Copy className="h-3 w-3 text-green-600 dark:text-green-400" />
-                            </button>
+                            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 flex gap-1 z-10">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditInteraction(interaction2, resident.id, 2, e);
+                                }}
+                                className={`p-1 rounded ${
+                                  interaction2.is_submitted 
+                                    ? 'hover:bg-green-200 dark:hover:bg-green-700'
+                                    : 'hover:bg-yellow-200 dark:hover:bg-yellow-700'
+                                }`}
+                                title="Edit interaction"
+                              >
+                                <Edit3 className={`h-3 w-3 ${
+                                  interaction2.is_submitted 
+                                    ? 'text-green-600 dark:text-green-400'
+                                    : 'text-yellow-600 dark:text-yellow-400'
+                                }`} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyToClipboard(
+                                    interaction2.details || 'No details provided'
+                                  );
+                                }}
+                                className={`p-1 rounded ${
+                                  interaction2.is_submitted 
+                                    ? 'hover:bg-green-200 dark:hover:bg-green-700'
+                                    : 'hover:bg-yellow-200 dark:hover:bg-yellow-700'
+                                }`}
+                                title="Copy interaction details"
+                              >
+                                <Copy className={`h-3 w-3 ${
+                                  interaction2.is_submitted 
+                                    ? 'text-green-600 dark:text-green-400'
+                                    : 'text-yellow-600 dark:text-yellow-400'
+                                }`} />
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           <button
@@ -748,18 +1008,30 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
 
                       {/* Interaction 3 */}
                       <td className={`p-2 text-center relative group w-[200px] ${
-                        interaction3 ? 'bg-green-100 dark:bg-green-900/30' : ''
+                        interaction3 
+                          ? interaction3.is_submitted 
+                            ? 'bg-green-100 dark:bg-green-900/30'
+                            : 'bg-yellow-100 dark:bg-yellow-900/30'
+                          : ''
                       }`}>
                         {interaction3 ? (
                           <div className="relative w-full">
                             <div 
-                              className={`text-xs text-green-900 dark:text-green-100 p-2 flex flex-col justify-center relative transition-all duration-200 cursor-pointer w-full ${
+                              className={`text-xs p-2 flex flex-col justify-center relative cursor-pointer w-full ${
                                 isCellExpanded(`${resident.id}-3`) ? 'max-h-48' : 'max-h-16'
-                              } overflow-hidden`}
+                              } overflow-hidden ${
+                                interaction3.is_submitted 
+                                  ? 'text-green-900 dark:text-green-100'
+                                  : 'text-yellow-900 dark:text-yellow-100'
+                              }`}
                               onClick={() => toggleCellExpansion(`${resident.id}-3`)}
                             >
                               <div 
-                                className="text-green-900 dark:text-green-100 text-center break-all leading-relaxed w-full overflow-wrap-anywhere max-w-full"
+                                className={`text-center break-all leading-relaxed w-full overflow-wrap-anywhere max-w-full ${
+                                  interaction3.is_submitted 
+                                    ? 'text-green-900 dark:text-green-100'
+                                    : 'text-yellow-900 dark:text-yellow-100'
+                                }`}
                                 style={{wordBreak: 'break-all', overflowWrap: 'anywhere'}}
                                 title={isCellExpanded(`${resident.id}-3`) ? 'Click to collapse' : 'Click to expand full text'}
                               >
@@ -770,26 +1042,57 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
                               </div>
                               {(interaction3.details || 'No details provided').length > 10 && (
                                 <span 
-                                  className="text-green-600 dark:text-green-400 text-xs opacity-60 mt-1 cursor-pointer"
+                                  className={`text-xs opacity-60 mt-1 cursor-pointer ${
+                                    interaction3.is_submitted 
+                                      ? 'text-green-600 dark:text-green-400'
+                                      : 'text-yellow-600 dark:text-yellow-400'
+                                  }`}
                                   onClick={() => toggleCellExpansion(`${resident.id}-3`)}
                                 >
                                   {isCellExpanded(`${resident.id}-3`) ? 'Click to collapse' : 'Click to expand'}
                                 </span>
                               )}
                             </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                copyToClipboard(
-                                  interaction3.details || 'No details provided',
-                                  'Interaction details'
-                                );
-                              }}
-                              className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 hover:bg-green-200 dark:hover:bg-green-700 rounded transition-all z-10"
-                              title="Copy interaction details"
-                            >
-                              <Copy className="h-3 w-3 text-green-600 dark:text-green-400" />
-                            </button>
+                            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 flex gap-1 z-10">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditInteraction(interaction3, resident.id, 3, e);
+                                }}
+                                className={`p-1 rounded ${
+                                  interaction3.is_submitted 
+                                    ? 'hover:bg-green-200 dark:hover:bg-green-700'
+                                    : 'hover:bg-yellow-200 dark:hover:bg-yellow-700'
+                                }`}
+                                title="Edit interaction"
+                              >
+                                <Edit3 className={`h-3 w-3 ${
+                                  interaction3.is_submitted 
+                                    ? 'text-green-600 dark:text-green-400'
+                                    : 'text-yellow-600 dark:text-yellow-400'
+                                }`} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyToClipboard(
+                                    interaction3.details || 'No details provided'
+                                  );
+                                }}
+                                className={`p-1 rounded ${
+                                  interaction3.is_submitted 
+                                    ? 'hover:bg-green-200 dark:hover:bg-green-700'
+                                    : 'hover:bg-yellow-200 dark:hover:bg-yellow-700'
+                                }`}
+                                title="Copy interaction details"
+                              >
+                                <Copy className={`h-3 w-3 ${
+                                  interaction3.is_submitted 
+                                    ? 'text-green-600 dark:text-green-400'
+                                    : 'text-yellow-600 dark:text-yellow-400'
+                                }`} />
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           <button
@@ -810,79 +1113,140 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         </div>
       )}
 
-      {/* Popover for adding interactions */}
-      {showPopover && (
-        <div
-          ref={popoverRef}
-          className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-4 min-w-[300px]"
-          style={{
-            left: showPopover.position.x - 150,
-            top: showPopover.position.y,
-          }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Add Interaction {showPopover.column}
-            </h4>
-            <button
-              onClick={() => setShowPopover(null)}
-              className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 p-1"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Date
-              </label>
-              <input
-                type="date"
-                value={interactionFormData.date}
-                onChange={(e) => setInteractionFormData(prev => ({...prev, date: e.target.value}))}
-                className="w-full px-3 py-2 text-sm text-gray-900 dark:text-gray-100 font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
+      {/* Popover for adding/editing interactions */}
+      {(showPopover || editingInteraction) && (
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            className="z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-4 min-w-[400px]"
+            {...getFloatingProps()}
+          >
+            
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm text-gray-900 dark:text-gray-100">
+                {editingInteraction ? (
+                  <>
+                    <span className="font-semibold">Edit Interaction {editingInteraction.column}</span>
+                    <span className="font-normal text-gray-600 dark:text-gray-400"> for {residents.find(r => r.id === editingInteraction.residentId)?.name || 'Unknown'}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-semibold">Add Interaction {showPopover?.column}</span>
+                    <span className="font-normal text-gray-600 dark:text-gray-400"> for {residents.find(r => r.id === showPopover?.residentId)?.name || 'Unknown'}</span>
+                  </>
+                )}
+              </h4>
+              <button
+                onClick={() => {
+                  setShowPopover(null);
+                  setEditingInteraction(null);
+                }}
+                className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 p-1"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Interaction Details
-              </label>
-              <textarea
-                value={interactionFormData.details}
-                onChange={(e) => setInteractionFormData(prev => ({...prev, details: e.target.value}))}
-                placeholder="Describe the interaction..."
-                rows={3}
-                className="w-full px-3 py-2 text-sm text-gray-900 dark:text-gray-100 font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none placeholder:text-gray-500 dark:placeholder:text-gray-400 placeholder:font-normal"
-              />
-            </div>
-          </div>
 
-          <div className="flex gap-2 mt-4">
-            <button
-              onClick={handleAddInteraction}
-              disabled={!interactionFormData.details.trim() || addingInteraction}
-              className="flex-1 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {addingInteraction ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                  Adding...
-                </>
-              ) : (
-                'Add'
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Date
+                </label>
+                <input
+                  type="date"
+                  value={editingInteraction ? editFormData.date : interactionFormData.date}
+                  onChange={(e) => {
+                    if (editingInteraction) {
+                      setEditFormData(prev => ({...prev, date: e.target.value}));
+                    } else {
+                      setInteractionFormData(prev => ({...prev, date: e.target.value}));
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-sm text-gray-900 dark:text-gray-100 font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Interaction Details
+                </label>
+                <textarea
+                  ref={textareaRef}
+                  value={editingInteraction ? editFormData.details : interactionFormData.details}
+                  onChange={(e) => {
+                    if (editingInteraction) {
+                      setEditFormData(prev => ({...prev, details: e.target.value}));
+                    } else {
+                      setInteractionFormData(prev => ({...prev, details: e.target.value}));
+                    }
+                  }}
+                  placeholder="Describe the interaction..."
+                  rows={6}
+                  className="w-full px-3 py-2 text-sm text-gray-900 dark:text-gray-100 font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-vertical placeholder:text-gray-500 dark:placeholder:text-gray-400 placeholder:font-normal"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3 mt-4">
+              {/* First Row: Update and Cancel */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => editingInteraction ? handleUpdateInteraction(false) : handleAddInteraction()}
+                  disabled={
+                    editingInteraction 
+                      ? !editFormData.details.trim() || addingInteraction
+                      : !interactionFormData.details.trim() || addingInteraction
+                  }
+                  className="flex-1 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {addingInteraction ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                      {editingInteraction ? 'Updating...' : 'Adding...'}
+                    </>
+                  ) : (
+                    editingInteraction ? 'Update' : 'Add'
+                  )}
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowPopover(null);
+                    setEditingInteraction(null);
+                  }}
+                  className="px-6 py-2 text-sm bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-400 dark:hover:bg-gray-500"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              {/* Second Row: Mark as Submitted (only for edit mode and not already submitted) */}
+              {editingInteraction && !editingInteraction.isSubmitted && (
+                <button
+                  onClick={() => handleUpdateInteraction(true)}
+                  disabled={!editFormData.details.trim() || addingInteraction}
+                  className="w-full px-3 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  title="Update interaction and mark as submitted"
+                >
+                  {addingInteraction ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Mark as Submitted
+                    </>
+                  )}
+                </button>
               )}
-            </button>
-            <button
-              onClick={() => setShowPopover(null)}
-              className="px-3 py-2 text-sm bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-400 dark:hover:bg-gray-500"
-            >
-              Cancel
-            </button>
+            </div>
           </div>
-        </div>
+        </FloatingPortal>
       )}
-
 
     </div>
   );

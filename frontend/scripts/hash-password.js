@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const bcrypt = require('bcryptjs');
 
 // Get password from command line argument
@@ -13,7 +14,6 @@ async function hashPassword() {
   try {
     const saltRounds = 12;
     const hash = await bcrypt.hash(password, saltRounds);
-    console.log('Password:', password);
     console.log('Hash:', hash);
     console.log('\nSQL to insert user:');
     console.log(`INSERT INTO users (username, password_hash, name, email, is_active) VALUES ('username', '${hash}', 'Full Name', 'email@example.com', true);`);

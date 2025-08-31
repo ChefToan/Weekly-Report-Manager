@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const text = await file.text();
     
     // Parse without header transformation first to preserve original case
-    const { data: csvData, errors, meta } = parse<any>(text, {
+    const { data: csvData, errors, meta } = parse<Record<string, string>>(text, {
       header: true,
       skipEmptyLines: true,
       // Don't transform headers - keep original case

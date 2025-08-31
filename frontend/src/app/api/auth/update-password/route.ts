@@ -10,8 +10,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token and password are required' }, { status: 400 });
     }
 
-    if (password.length < 6) {
-      return NextResponse.json({ error: 'Password must be at least 6 characters long' }, { status: 400 });
+    // Strengthen password requirements
+    if (password.length < 8) {
+      return NextResponse.json({ error: 'Password must be at least 8 characters long' }, { status: 400 });
+    }
+
+    // Check password complexity
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumbers = /\d/.test(password);
+    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+
+    const complexityCount = [hasUpperCase, hasLowerCase, hasNumbers, hasSpecialChar].filter(Boolean).length;
+    
+    if (complexityCount < 3) {
+      return NextResponse.json({ 
+        error: 'Password must contain at least 3 of the following: uppercase letters, lowercase letters, numbers, special characters' 
+      }, { status: 400 });
     }
 
     // Use service role client
@@ -28,7 +43,6 @@ export async function POST(request: NextRequest) {
 
     // Since we're not storing tokens in DB yet, we'll use a simple approach
     // In a real implementation, you'd validate the token from the database
-    console.log('Password reset request with token:', token);
 
     // TEMPORARY: Since we don't have token storage working yet,
     // we'll decode the token to find which user this belongs to
@@ -79,7 +93,6 @@ export async function POST(request: NextRequest) {
     // 2. Invalidate all user sessions
     // 3. Send a confirmation email
 
-    console.log('Password updated successfully for user:', user.email);
 
     return NextResponse.json({ 
       success: true, 

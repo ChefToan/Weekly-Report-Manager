@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ProgressStats from '@/components/dashboard/ProgressStats';
 import ResidentsGrid from '@/components/residents/ResidentsGrid';
 import WeeklyReportGenerator from '@/components/reports/WeeklyReportGenerator';
@@ -22,6 +22,20 @@ export default function HomePage() {
   const [statsRefreshTrigger, setStatsRefreshTrigger] = useState(0);
   const { user, logout } = useAuth();
 
+  // Load saved tab state from localStorage on mount
+  useEffect(() => {
+    const savedTab = localStorage.getItem('activeTab') as TabType;
+    const savedAdminTab = localStorage.getItem('adminActiveTab') as AdminTabType;
+    
+    if (savedTab && ['dashboard', 'residents', 'reports', 'admin'].includes(savedTab)) {
+      setActiveTab(savedTab);
+    }
+    
+    if (savedAdminTab && ['users', 'codes'].includes(savedAdminTab)) {
+      setAdminActiveTab(savedAdminTab);
+    }
+  }, []);
+
   const handleInteractionUpdate = () => {
     setStatsRefreshTrigger(prev => prev + 1);
     setGridRefreshTrigger(prev => prev + 1);
@@ -29,6 +43,7 @@ export default function HomePage() {
 
   const handleTabChange = (newTab: TabType) => {
     setActiveTab(newTab);
+    localStorage.setItem('activeTab', newTab);
   };
 
   // For admin users, show only user management
@@ -80,7 +95,11 @@ export default function HomePage() {
                     return (
                       <button
                         key={item.id}
-                        onClick={() => setAdminActiveTab(item.id as AdminTabType)}
+                        onClick={() => {
+                          const newAdminTab = item.id as AdminTabType;
+                          setAdminActiveTab(newAdminTab);
+                          localStorage.setItem('adminActiveTab', newAdminTab);
+                        }}
                         className={`
                           flex items-center space-x-2 rounded-full transition-all duration-200 hover:scale-105
                           ${isActive 
@@ -147,7 +166,7 @@ export default function HomePage() {
       case 'reports':
         return (
           <div className="space-y-6">
-            <WeeklyReportGenerator />
+            <WeeklyReportGenerator onInteractionUpdate={handleInteractionUpdate} />
           </div>
         );
 
@@ -157,8 +176,6 @@ export default function HomePage() {
     }
   };
 
-  // @ts-ignore
-  // @ts-ignore
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header with Navigation and User Info */}

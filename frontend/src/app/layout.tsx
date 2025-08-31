@@ -5,8 +5,8 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import AuthGuard from '@/components/auth/AuthGuard';
 
 export const metadata: Metadata = {
-  title: "Tooker Backyard",
-  description: "Resident Interaction Tracker",
+  title: "Weekly Reports",
+  description: "Community Assistant Weekly Report Management System",
 };
 
 export default function RootLayout({

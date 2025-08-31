@@ -7,7 +7,6 @@ export async function POST(request: NextRequest) {
   try {
     const { username, password } = await request.json();
     
-    console.log('Login attempt:', { username, passwordLength: password?.length });
 
     if (!username || !password) {
       return NextResponse.json({ error: 'Username or email and password are required' }, { status: 400 });
@@ -17,14 +16,9 @@ export async function POST(request: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     
-    console.log('Environment check:', {
-      hasUrl: !!supabaseUrl,
-      hasServiceKey: !!serviceKey,
-      serviceKeyPrefix: serviceKey?.substring(0, 20) + '...'
-    });
 
     if (!supabaseUrl || !serviceKey) {
-      console.log('Missing environment variables');
+      console.error('Missing required environment variables');
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
     }
 
@@ -39,10 +33,6 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Test the connection first
-    console.log('Testing direct table access...');
-    const testQuery = await supabase.rpc('version');
-    console.log('Version test:', testQuery);
 
     // Find user by username or email
     const isEmail = username.includes('@');
@@ -53,23 +43,15 @@ export async function POST(request: NextRequest) {
       .eq('is_active', true)
       .single();
 
-    console.log('User query result:', { 
-      userFound: !!user, 
-      userError: userError?.message, 
-      isActive: user?.is_active 
-    });
 
     if (userError || !user) {
-      console.log('User not found or error:', userError);
       return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 });
     }
 
     // Verify password
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
-    console.log('Password comparison result:', passwordMatch);
     
     if (!passwordMatch) {
-      console.log('Password mismatch');
       return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 });
     }
 
@@ -83,7 +65,6 @@ export async function POST(request: NextRequest) {
     const sessionToken = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-    console.log('Creating session:', { sessionToken: sessionToken.substring(0, 10) + '...', userId: user.id });
 
     const sessionResult = await supabase
       .from('user_sessions')
@@ -93,7 +74,6 @@ export async function POST(request: NextRequest) {
         expires_at: expiresAt.toISOString()
       });
 
-    console.log('Session creation result:', { error: sessionResult.error?.message, success: !sessionResult.error });
 
     // Set session cookie
     const response = NextResponse.json({ 
@@ -117,11 +97,6 @@ export async function POST(request: NextRequest) {
       expires: expiresAt
     });
 
-    console.log('Cookie set:', { 
-      sessionToken: sessionToken.substring(0, 10) + '...',
-      expires: expiresAt.toISOString(),
-      production: process.env.NODE_ENV === 'production'
-    });
 
     return response;
   } catch (error) {

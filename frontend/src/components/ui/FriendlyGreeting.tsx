@@ -76,7 +76,46 @@ export default function FriendlyGreeting({ firstName }: FriendlyGreetingProps) {
       return { ...selected, icon: '🦉' };
     };
 
-    setGreeting(getTimeBasedGreeting());
+    const getTimePeriod = () => {
+      const now = new Date();
+      const hour = now.getHours();
+      if (hour >= 5 && hour < 12) return 'morning';
+      if (hour >= 12 && hour < 17) return 'afternoon';
+      if (hour >= 17 && hour < 22) return 'evening';
+      return 'night';
+    };
+
+    const today = new Date().toDateString();
+    const currentPeriod = getTimePeriod();
+    const storageKey = `greeting-${firstName}`;
+    
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const savedData = JSON.parse(saved);
+        // Use saved greeting if it's the same day and time period
+        if (savedData.date === today && savedData.period === currentPeriod && savedData.greeting) {
+          setGreeting(savedData.greeting);
+          return;
+        }
+      }
+    } catch (e) {
+      // If localStorage fails, just continue with new greeting
+    }
+
+    // Generate new greeting and save it
+    const newGreeting = getTimeBasedGreeting();
+    setGreeting(newGreeting);
+    
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({
+        date: today,
+        period: currentPeriod,
+        greeting: newGreeting
+      }));
+    } catch (e) {
+      // If localStorage fails, continue without saving
+    }
   }, [firstName]);
 
   if (!greeting.message) {
@@ -93,7 +132,7 @@ export default function FriendlyGreeting({ firstName }: FriendlyGreetingProps) {
           {greeting.message}
         </p>
         <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-          Welcome to Tooker Backyard
+          Welcome to Weekly Reports
         </p>
       </div>
     </div>

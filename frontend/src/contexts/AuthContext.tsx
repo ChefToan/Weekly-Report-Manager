@@ -43,19 +43,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const checkAuth = async () => {
     try {
-      console.log('AuthContext: Checking authentication...');
       const response = await fetch('/api/auth/me', {
         credentials: 'include',
       });
 
-      console.log('AuthContext: Auth check response:', { status: response.status, ok: response.ok });
-
       if (response.ok) {
         const data = await response.json();
-        console.log('AuthContext: User authenticated:', { username: data.user?.username, first_name: data.user?.first_name, last_name: data.user?.last_name });
         setUser(data.user);
       } else {
-        console.log('AuthContext: Auth check failed, clearing user');
         setUser(null);
       }
     } catch (error) {

@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const weekStarting = searchParams.get('weekStarting');
     const residentId = searchParams.get('residentId');
+    const submitted = searchParams.get('submitted');
 
     let query = supabase
       .from('interactions')
@@ -30,6 +31,11 @@ export async function GET(request: NextRequest) {
 
     if (residentId) {
       query = query.eq('resident_id', residentId);
+    }
+
+    if (submitted !== null) {
+      const isSubmitted = submitted === 'true';
+      query = query.eq('is_submitted', isSubmitted);
     }
 
     const { data: interactions, error } = await query;

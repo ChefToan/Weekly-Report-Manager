@@ -7,10 +7,8 @@ export async function GET(request: NextRequest) {
     const cookieStore = await cookies();
     const sessionToken = cookieStore.get('session_token')?.value;
 
-    console.log('Auth check - session token:', sessionToken ? sessionToken.substring(0, 10) + '...' : 'none');
 
     if (!sessionToken) {
-      console.log('No session token found in cookies');
       return NextResponse.json({ error: 'No session found' }, { status: 401 });
     }
 
@@ -27,7 +25,6 @@ export async function GET(request: NextRequest) {
     );
 
     // Get session and user data
-    console.log('Querying session with token:', sessionToken.substring(0, 10) + '...');
     
     const { data: session, error: sessionError } = await supabase
       .from('user_sessions')
@@ -50,14 +47,8 @@ export async function GET(request: NextRequest) {
       .gt('expires_at', new Date().toISOString())
       .single();
 
-    console.log('Session query result:', { 
-      found: !!session, 
-      error: sessionError?.message,
-      hasUsers: !!(session && session.users)
-    });
 
     if (sessionError || !session || !session.users) {
-      console.log('Session validation failed:', { sessionError, hasSession: !!session, hasUsers: !!(session && session.users) });
       return NextResponse.json({ error: 'Invalid or expired session' }, { status: 401 });
     }
 

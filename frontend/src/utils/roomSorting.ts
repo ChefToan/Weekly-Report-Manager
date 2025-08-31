@@ -1,9 +1,11 @@
 // Utility functions for room-based sorting
 
 export interface ResidentWithRoom {
+  id: string;
+  empl_id: string;
   room?: string | null;
   name: string;
-  [key: string]: any;
+  [key: string]: string | number | boolean | null | undefined;
 }
 
 // Extract room components for sorting

@@ -47,8 +47,21 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters long');
+      setLoading(false);
+      return;
+    }
+
+    // Check password complexity to match backend validation
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumbers = /\d/.test(password);
+    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+    const complexityCount = [hasUpperCase, hasLowerCase, hasNumbers, hasSpecialChar].filter(Boolean).length;
+    
+    if (complexityCount < 3) {
+      setError('Password must contain at least 3 of the following: uppercase letters, lowercase letters, numbers, special characters');
       setLoading(false);
       return;
     }
@@ -190,7 +203,7 @@ export default function ResetPasswordPage() {
                     className="w-full px-4 py-3 pr-12 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     required
                     disabled={loading}
-                    minLength={6}
+                    minLength={8}
                   />
                   <button
                     type="button"
@@ -205,6 +218,9 @@ export default function ResetPasswordPage() {
                     )}
                   </button>
                 </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  At least 8 characters with 3 of: uppercase, lowercase, numbers, special characters
+                </p>
               </div>
 
               {/* Confirm Password */}
@@ -222,7 +238,7 @@ export default function ResetPasswordPage() {
                     className="w-full px-4 py-3 pr-12 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     required
                     disabled={loading}
-                    minLength={6}
+                    minLength={8}
                   />
                   <button
                     type="button"

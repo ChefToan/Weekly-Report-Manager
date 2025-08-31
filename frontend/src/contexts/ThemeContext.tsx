@@ -76,11 +76,6 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       document.head.removeChild(style);
     }, 50);
     
-    console.log(`Theme updated to: ${newTheme}`, {
-      classList: Array.from(root.classList),
-      dataTheme: root.getAttribute('data-theme'),
-      colorScheme: root.style.colorScheme
-    });
   };
 
   const setTheme = (newTheme: Theme) => {

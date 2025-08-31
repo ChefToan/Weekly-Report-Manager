@@ -9,8 +9,6 @@ export async function GET(request: NextRequest) {
     // Try direct HTTP request to Supabase REST API
     const restUrl = `${supabaseUrl}/rest/v1/users?select=username,name,is_active&limit=3`;
     
-    console.log('Making direct HTTP request to:', restUrl);
-    
     const response = await fetch(restUrl, {
       method: 'GET',
       headers: {
@@ -21,11 +19,7 @@ export async function GET(request: NextRequest) {
       }
     });
     
-    console.log('HTTP Response status:', response.status);
-    console.log('HTTP Response headers:', Object.fromEntries(response.headers.entries()));
-    
     const responseText = await response.text();
-    console.log('HTTP Response body:', responseText);
     
     let data;
     try {

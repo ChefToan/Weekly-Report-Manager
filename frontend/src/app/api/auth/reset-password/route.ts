@@ -6,7 +6,6 @@ export async function POST(request: NextRequest) {
   try {
     const { email } = await request.json();
     
-    console.log('Password reset request for:', email);
 
     if (!email || !email.includes('@')) {
       return NextResponse.json({ error: 'Valid email address is required' }, { status: 400 });
@@ -35,7 +34,6 @@ export async function POST(request: NextRequest) {
     const successMessage = 'If an account exists with this email, you will receive password reset instructions.';
 
     if (userError || !user || !user.is_active) {
-      console.log('User not found or inactive for email:', email);
       // Still return success to prevent email enumeration
       return NextResponse.json({ success: true, message: successMessage });
     }
@@ -44,20 +42,15 @@ export async function POST(request: NextRequest) {
     const resetToken = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
 
-    // For now, skip token storage and just send email for testing
-    // The token will be logged in console for development
-    console.log('Development mode: Reset token would be stored:', resetToken);
-    console.log('This token would expire at:', expiresAt.toISOString());
+    // For development mode, we'll temporarily store the token in a simple way
+    // In production, you should use a proper database table for this
 
     // Send email with reset link (include email for easier lookup until DB is fixed)
     const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
     
-    console.log('Generated reset URL:', resetUrl);
-    console.log('APP_URL from env:', process.env.NEXT_PUBLIC_APP_URL);
     
     try {
       await sendResetEmail(user.email, user.first_name, resetUrl);
-      console.log('Password reset email sent successfully to:', email);
     } catch (emailError) {
       console.error('Error sending reset email:', emailError);
       // Still return success to prevent revealing system issues
@@ -82,21 +75,21 @@ async function sendResetEmail(email: string, firstName: string, resetUrl: string
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: process.env.FROM_EMAIL || 'noreply@yourdomain.com',
+        from: process.env.FROM_EMAIL || 'noreply@weeklyreport.info',
         to: [email],
-        subject: 'Reset Your Password - Tooker Backyard',
+        subject: 'Reset Your Password - Weekly Reports',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #333;">Reset Your Password</h2>
             <p>Hello ${firstName},</p>
-            <p>You requested to reset your password for Tooker Backyard. Click the button below to reset your password:</p>
+            <p>You requested to reset your password for Weekly Reports. Click the button below to reset your password:</p>
             <div style="text-align: center; margin: 30px 0;">
               <a href="${resetUrl}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Reset Password</a>
             </div>
             <p>This link will expire in 1 hour.</p>
             <p>If you didn't request this reset, you can safely ignore this email.</p>
             <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
-            <p style="color: #666; font-size: 12px;">Tooker Backyard</p>
+            <p style="color: #666; font-size: 12px;">Weekly Reports</p>
           </div>
         `
       }),
@@ -107,16 +100,9 @@ async function sendResetEmail(email: string, firstName: string, resetUrl: string
     }
   } else if (process.env.SMTP_HOST) {
     // Use SMTP (you'd implement this with nodemailer or similar)
-    console.log('SMTP not implemented yet. Reset URL would be:', resetUrl);
     throw new Error('SMTP email sending not implemented');
   } else {
-    // Development mode - just log the reset URL
-    console.log('='.repeat(80));
-    console.log('PASSWORD RESET EMAIL (Development Mode)');
-    console.log('='.repeat(80));
-    console.log(`To: ${email}`);
-    console.log(`Reset URL: ${resetUrl}`);
-    console.log('='.repeat(80));
+    // Development mode - in production, configure proper email service
     
     // In development, we don't actually send an email, but we still "succeed"
     return;

@@ -6,7 +6,6 @@ export async function POST(request: NextRequest) {
   try {
     const { firstName, lastName, email, asuId, username, password, confirmPassword, registrationCode } = await request.json();
     
-    console.log('Registration attempt:', { username, email, asuId, registrationCode, passwordLength: password?.length });
 
     // Basic validation
     if (!firstName || !lastName || !email || !asuId || !username || !password || !confirmPassword || !registrationCode) {
@@ -36,8 +35,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Passwords do not match' }, { status: 400 });
     }
 
-    if (password.length < 6) {
-      return NextResponse.json({ error: 'Password must be at least 6 characters long' }, { status: 400 });
+    // Strengthen password requirements
+    if (password.length < 8) {
+      return NextResponse.json({ error: 'Password must be at least 8 characters long' }, { status: 400 });
+    }
+
+    // Check password complexity
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumbers = /\d/.test(password);
+    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+
+    const complexityCount = [hasUpperCase, hasLowerCase, hasNumbers, hasSpecialChar].filter(Boolean).length;
+    
+    if (complexityCount < 3) {
+      return NextResponse.json({ 
+        error: 'Password must contain at least 3 of the following: uppercase letters, lowercase letters, numbers, special characters' 
+      }, { status: 400 });
     }
 
     if (username.length < 3) {
@@ -85,7 +99,6 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (codeError || !regCode) {
-      console.log('Registration code validation failed:', codeError);
       return NextResponse.json({ error: 'Invalid or expired registration code' }, { status: 400 });
     }
 
@@ -127,7 +140,6 @@ export async function POST(request: NextRequest) {
       // User is created, so we don't fail the registration
     }
 
-    console.log('User registered successfully:', { userId: newUser.id, username: newUser.username, email: newUser.email });
 
     return NextResponse.json({ 
       success: true, 

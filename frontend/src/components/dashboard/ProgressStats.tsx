@@ -16,9 +16,26 @@ interface ProgressStats {
 export default function ProgressStats() {
   const [stats, setStats] = useState<ProgressStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
     fetchStats();
+    
+    // Check for dark mode
+    const checkDarkMode = () => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    };
+    
+    checkDarkMode();
+    
+    // Watch for theme changes
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
   }, []);
 
   const fetchStats = async () => {
@@ -35,16 +52,40 @@ export default function ProgressStats() {
     }
   };
 
-  const getCompletionColor = (percentage: number) => {
-    if (percentage >= 100) return 'text-green-600 dark:text-green-400';
-    if (percentage >= 75) return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-red-600 dark:text-red-400';
-  };
-
-  const getCompletionBgColor = (percentage: number) => {
-    if (percentage >= 100) return 'bg-green-100 dark:bg-green-900/30 border-green-200 dark:border-green-800';
-    if (percentage >= 75) return 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800';
-    return 'bg-red-100 dark:bg-red-900/30 border-red-200 dark:border-red-800';
+  // Generate smooth color transitions based on percentage (0-100)
+  const getProgressColors = (percentage: number) => {
+    // Clamp percentage between 0 and 100
+    const clampedPercentage = Math.max(0, Math.min(100, percentage));
+    
+    let r, g, b;
+    
+    if (clampedPercentage <= 50) {
+      // Red to Orange/Yellow transition (0-50%) - brighter, more vibrant colors
+      const factor = clampedPercentage / 50;
+      r = Math.round(255 - (45 * factor)); // Red: 255 to 210 (bright red to vibrant orange)
+      g = Math.round(65 + (155 * factor)); // Green: 65 to 220 (creates vibrant orange/yellow)
+      b = Math.round(20 + (25 * factor)); // Blue stays low but adds warmth
+    } else {
+      // Orange to Green transition (50-100%) - vibrant transition
+      const factor = (clampedPercentage - 50) / 50;
+      r = Math.round(210 - (165 * factor)); // Red decreases from 210 to 45 (vibrant orange to bright green)
+      g = Math.round(220 + (25 * factor)); // Green increases from 220 to 245 (bright throughout)
+      b = Math.round(45 + (75 * factor)); // Blue increases from 45 to 120 (adds vibrancy to green)
+    }
+    
+    // For dark mode, make colors even more vibrant for better visibility
+    const darkR = Math.round(Math.min(255, r * 1.15));
+    const darkG = Math.round(Math.min(255, g * 1.15));
+    const darkB = Math.round(Math.min(255, b * 1.15));
+    
+    return {
+      light: `rgb(${r}, ${g}, ${b})`,
+      dark: `rgb(${darkR}, ${darkG}, ${darkB})`,
+      lightBg: `rgba(${r}, ${g}, ${b}, 0.12)`,
+      darkBg: `rgba(${darkR}, ${darkG}, ${darkB}, 0.20)`,
+      lightBorder: `rgba(${r}, ${g}, ${b}, 0.25)`,
+      darkBorder: `rgba(${darkR}, ${darkG}, ${darkB}, 0.35)`
+    };
   };
 
   const getResidentsWithMinInteractions = () => {
@@ -122,14 +163,38 @@ export default function ProgressStats() {
           </div>
         </div>
 
-        <div className={`p-6 rounded-lg shadow-sm border ${getCompletionBgColor(stats.completionPercentage)}`}>
+        <div 
+          className="p-6 rounded-lg shadow-sm border transition-all duration-300"
+          style={{
+            backgroundColor: isDarkMode 
+              ? getProgressColors(stats.completionPercentage).darkBg 
+              : getProgressColors(stats.completionPercentage).lightBg,
+            borderColor: isDarkMode 
+              ? getProgressColors(stats.completionPercentage).darkBorder 
+              : getProgressColors(stats.completionPercentage).lightBorder,
+          }}
+        >
           <div className="flex items-center">
             <div className="p-2 bg-white dark:bg-gray-800 rounded-lg">
-              <TrendingUp className={`h-6 w-6 ${getCompletionColor(stats.completionPercentage)}`} />
+              <TrendingUp 
+                className="h-6 w-6 transition-colors duration-300"
+                style={{
+                  color: isDarkMode 
+                    ? getProgressColors(stats.completionPercentage).dark
+                    : getProgressColors(stats.completionPercentage).light
+                }}
+              />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Progress</p>
-              <p className={`text-2xl font-semibold ${getCompletionColor(stats.completionPercentage)}`}>
+              <p 
+                className="text-2xl font-semibold transition-colors duration-300"
+                style={{
+                  color: isDarkMode 
+                    ? getProgressColors(stats.completionPercentage).dark
+                    : getProgressColors(stats.completionPercentage).light
+                }}
+              >
                 {stats.completionPercentage}%
               </p>
             </div>

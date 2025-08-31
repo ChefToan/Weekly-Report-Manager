@@ -148,7 +148,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         setAllUnsubmittedInteractions(transformedData);
       }
     } catch {
-      console.error('Error fetching unsubmitted interactions:', error);
+      console.error('Error fetching unsubmitted interactions');
     }
   };
 

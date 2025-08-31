@@ -183,7 +183,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
       await navigator.clipboard.writeText(text);
       // You could add a toast notification here
     } catch {
-      console.error('Failed to copy: ', err);
+      console.error('Failed to copy');
     }
   };
 
@@ -254,11 +254,11 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         setShowAddResidents(false);
       } else {
         const data = await response.json();
-        console.error('Add resident failed:', data.error);
+        console.error("Error occurred");
         alert('Failed to add resident: ' + (data.error || 'Unknown error'));
       }
     } catch {
-      console.error('Network error occurred');
+      console.error("Error occurred");
       alert('Network error occurred');
     } finally {
       setImporting(false);
@@ -286,7 +286,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
       onInteractionUpdate?.();
       setSelectedResidents(new Set());
     } catch {
-      console.error('Error removing residents:', error);
+      console.error('Error removing residents');
       alert('Error removing residents');
     } finally {
       setRemovingResidents(false);
@@ -341,10 +341,10 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         setResidents(sortedResidents);
       } else {
         const errorData = await response.json();
-        console.error('API Error:', errorData);
+        console.error("Error occurred");
       }
     } catch {
-      console.error('Error fetching residents:', error);
+      console.error("Error occurred");
     } finally {
       setLoading(false);
     }
@@ -365,7 +365,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         setInteractions(groupedInteractions);
       }
     } catch {
-      console.error('Error fetching interactions:', error);
+      console.error("Error occurred");
     }
   };
 
@@ -438,7 +438,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         console.error('Response text:', responseText);
       }
     } catch {
-      console.error('Error updating interaction:', error);
+      console.error("Error occurred");
     } finally {
       setAddingInteraction(false);
     }
@@ -497,13 +497,13 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         console.error('Response text:', responseText);
         try {
           const errorData = JSON.parse(responseText);
-          console.error('Error data:', errorData);
+          console.error("Error occurred");
         } catch {
-          console.error('Could not parse error response as JSON');
+          console.error("Error occurred");
         }
       }
     } catch {
-      console.error('Error adding interaction:', error);
+      console.error("Error occurred");
     } finally {
       setAddingInteraction(false);
     }

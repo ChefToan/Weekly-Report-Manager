@@ -46,7 +46,7 @@ export default function ProgressStats() {
         setStats(data);
       }
     } catch {
-      console.error('Error fetching stats:', error);
+      console.error('Error fetching stats');
     } finally {
       setLoading(false);
     }

@@ -54,7 +54,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(null);
       }
     } catch {
-      console.error('Auth check failed:', error);
+      console.error('Auth check failed');
       setUser(null);
     } finally {
       setLoading(false);
@@ -72,7 +72,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         credentials: 'include',
       });
     } catch {
-      console.error('Logout failed:', error);
+      console.error('Logout failed');
     } finally {
       setUser(null);
       window.location.href = '/login';

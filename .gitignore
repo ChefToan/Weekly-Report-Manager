@@ -77,3 +77,7 @@ config/production.json
 *.tgz
 *.tar.gz
 cookies.txt
+
+
+DEPLOYMENT_GUIDE.md
+SECURITY_AUDIT.md

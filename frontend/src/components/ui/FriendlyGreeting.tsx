@@ -131,9 +131,9 @@ export default function FriendlyGreeting({ firstName }: FriendlyGreetingProps) {
         <p className="text-base font-medium text-gray-800 dark:text-gray-100">
           {greeting.message}
         </p>
-        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-          Welcome to Weekly Reports
-        </p>
+        {/*<p className="text-xs text-gray-600 dark:text-gray-400 mt-1">*/}
+        {/*  Welcome to Weekly Reports*/}
+        {/*</p>*/}
       </div>
     </div>
   );

@@ -277,17 +277,31 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
 
     setRemovingResidents(true);
     try {
-      const promises = Array.from(selectedResidents).map(id =>
-        fetch(`/api/residents/${id}`, { method: 'DELETE' })
-      );
+      // OPTIMIZED: Use batch delete API instead of individual requests
+      const response = await fetch('/api/residents', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ids: Array.from(selectedResidents)
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete residents');
+      }
+
+      const result = await response.json();
+      console.log(`Successfully deleted ${result.deletedIds?.length || selectedResidents.size} residents`);
       
-      await Promise.all(promises);
       await fetchResidents();
       onInteractionUpdate?.();
       setSelectedResidents(new Set());
-    } catch {
-      console.error('Error removing residents');
-      alert('Error removing residents');
+    } catch (error: any) {
+      console.error('Error removing residents:', error);
+      alert(`Error removing residents: ${error.message || 'Unknown error'}`);
     } finally {
       setRemovingResidents(false);
     }

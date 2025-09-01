@@ -43,6 +43,11 @@ jobs:
           git fetch origin
           git reset --hard origin/main
           
+          # Create logs directory for PM2 and nginx (one-time setup)
+          echo "Setting up logs directory..."
+          mkdir -p /home/ubuntu/weekly-report-site/logs/{pm2,nginx,app}
+          chmod 755 /home/ubuntu/weekly-report-site/logs/
+          
           # Install dependencies and build
           echo "Installing dependencies..."
           cd frontend
@@ -51,9 +56,10 @@ jobs:
           echo "Building application..."
           npm run build
           
-          # Restart application
+          # Restart application with optimized ecosystem config
           echo "Restarting application..."
-          pm2 restart weeklyreport || pm2 start ecosystem.config.js
+          cd /home/ubuntu/weekly-report-site
+          pm2 restart ecosystem.config.js || pm2 start ecosystem.config.js
           
           # Verify deployment
           echo "Verifying deployment..."

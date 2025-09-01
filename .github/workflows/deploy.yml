@@ -13,9 +13,9 @@ jobs:
     - name: Deploy to server
       uses: appleboy/ssh-action@v1.0.3
       with:
-        host: ${{ secrets.HOST }}
+        host: ${{ secrets.SERVER_HOST }}
         username: ubuntu
-        key: ${{ secrets.PRIVATE_KEY }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
         script: |
           set -e
           
@@ -68,7 +68,7 @@ jobs:
             pm2 logs --lines 20
             exit 1
           fi
-          echo "=€ Deployment completed successfully!"
+          echo "=ï¿½ Deployment completed successfully!"
         timeout: 30s
         command_timeout: 10m
         proxy_port: 22

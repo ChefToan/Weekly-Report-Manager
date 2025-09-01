@@ -299,9 +299,9 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
       await fetchResidents();
       onInteractionUpdate?.();
       setSelectedResidents(new Set());
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error removing residents:', error);
-      alert(`Error removing residents: ${error.message || 'Unknown error'}`);
+      alert(`Error removing residents: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setRemovingResidents(false);
     }
@@ -354,7 +354,6 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         const sortedResidents = sortResidentsByRoom(data || []);
         setResidents(sortedResidents);
       } else {
-        const errorData = await response.json();
         console.error("Error occurred");
       }
     } catch {
@@ -510,7 +509,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         console.error('Failed to add interaction. Status:', response.status);
         console.error('Response text:', responseText);
         try {
-          const errorData = JSON.parse(responseText);
+          JSON.parse(responseText);
           console.error("Error occurred");
         } catch {
           console.error("Error occurred");

@@ -62,14 +62,12 @@ jobs:
           # Test health check (wait for app to start)
           sleep 10
           if curl -f -s http://localhost:3000 > /dev/null; then
-            echo " Deployment successful! Application is responding."
+            echo "✅ Deployment successful! Application is responding."
           else
-            echo "L Warning: Application may not be responding correctly."
+            echo "❌ Warning: Application may not be responding correctly."
             pm2 logs --lines 20
             exit 1
           fi
-          echo "=� Deployment completed successfully!"
+          echo "🚀 Deployment completed successfully!"
         timeout: 30s
         command_timeout: 10m
-        proxy_port: 22
-        proxy_timeout: 30s

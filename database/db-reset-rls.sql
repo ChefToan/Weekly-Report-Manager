@@ -1,31 +1,11 @@
--- Complete reset of permissions and RLS
--- Run this entire script in Supabase SQL Editor
+-- Reset RLS and policies to the canonical configuration
+-- Run this in Supabase SQL editor
 
--- 1. First, check what role we're running as
+-- 1) Who am I
 SELECT current_user, current_setting('role') as current_role;
 
--- 2. Check current RLS status
-SELECT 
-  schemaname, 
-  tablename, 
-  rowsecurity as rls_enabled,
-  case when rowsecurity then 'RLS ON' else 'RLS OFF' end as status
-FROM pg_tables 
-WHERE schemaname = 'public' 
-  AND tablename IN ('users', 'user_sessions', 'residents', 'interactions');
-
--- 3. Drop ALL policies completely
-DROP POLICY IF EXISTS "Service role can manage residents" ON residents;
-DROP POLICY IF EXISTS "Allow public access to residents" ON residents;
-DROP POLICY IF EXISTS "Service role can manage interactions" ON interactions;
-DROP POLICY IF EXISTS "Allow public access to interactions" ON interactions;
-DROP POLICY IF EXISTS "Service role can manage users" ON users;
-DROP POLICY IF EXISTS "Allow public read access to users" ON users;
-DROP POLICY IF EXISTS "Service role can manage sessions" ON user_sessions;
-DROP POLICY IF EXISTS "Allow public access to sessions" ON user_sessions;
-
--- Drop any other policies that might exist
-DO $$ 
+-- 2) Drop ALL existing policies on relevant tables
+DO $$
 DECLARE 
     r RECORD;
 BEGIN
@@ -33,28 +13,73 @@ BEGIN
         SELECT schemaname, tablename, policyname
         FROM pg_policies 
         WHERE schemaname = 'public' 
-          AND tablename IN ('residents', 'interactions', 'users', 'user_sessions')
+          AND tablename IN ('residents', 'interactions', 'users', 'user_sessions', 'registration_codes', 'password_reset_tokens')
     ) LOOP
-        EXECUTE 'DROP POLICY IF EXISTS "' || r.policyname || '" ON ' || r.schemaname || '.' || r.tablename;
+        EXECUTE 'DROP POLICY IF EXISTS ' || quote_ident(r.policyname) || ' ON ' || quote_ident(r.schemaname) || '.' || quote_ident(r.tablename);
     END LOOP;
 END $$;
 
--- 4. Force disable RLS
-ALTER TABLE public.residents DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.interactions DISABLE ROW LEVEL SECURITY; 
-ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_sessions DISABLE ROW LEVEL SECURITY;
+-- 3) Ensure RLS is enabled on all tables
+ALTER TABLE public.residents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.interactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.registration_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.password_reset_tokens ENABLE ROW LEVEL SECURITY;
 
--- 5. Grant explicit permissions to service_role
+-- 4) Recreate canonical policies
+-- Residents: user-scoped CRUD
+CREATE POLICY "Users can only see their own residents" ON residents
+  FOR SELECT USING (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+CREATE POLICY "Users can only create their own residents" ON residents
+  FOR INSERT WITH CHECK (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+CREATE POLICY "Users can only update their own residents" ON residents
+  FOR UPDATE USING (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+CREATE POLICY "Users can only delete their own residents" ON residents
+  FOR DELETE USING (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+-- Interactions: user-scoped CRUD
+CREATE POLICY "Users can only see their own interactions" ON interactions
+  FOR SELECT USING (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+CREATE POLICY "Users can only create their own interactions" ON interactions
+  FOR INSERT WITH CHECK (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+CREATE POLICY "Users can only update their own interactions" ON interactions
+  FOR UPDATE USING (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+CREATE POLICY "Users can only delete their own interactions" ON interactions
+  FOR DELETE USING (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+-- Users: self-read + service role full
+CREATE POLICY "Users can read their own data" ON users
+  FOR SELECT USING (auth.uid()::text = id::text);
+
+CREATE POLICY "Service role can manage all users" ON users
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- Sessions: service role full
+CREATE POLICY "Service role can manage all sessions" ON user_sessions
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- Registration codes: service role full
+CREATE POLICY "Service role can manage all registration codes" ON registration_codes
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- Password reset tokens: service role full
+CREATE POLICY "Service role can manage all password reset tokens" ON password_reset_tokens
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- 5) Optional grants (roles permissions)
+GRANT USAGE ON SCHEMA public TO service_role, anon;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO service_role;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO service_role;
-GRANT USAGE ON SCHEMA public TO service_role;
 
--- 6. Also grant to anon role just in case
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
-GRANT USAGE ON SCHEMA public TO anon;
-
--- 7. Verify everything is working
+-- 6) Verify
 SELECT 'After reset - RLS status' as test;
 SELECT 
   schemaname, 
@@ -63,15 +88,12 @@ SELECT
   case when rowsecurity then 'RLS ON' else 'RLS OFF' end as status
 FROM pg_tables 
 WHERE schemaname = 'public' 
-  AND tablename IN ('users', 'user_sessions', 'residents', 'interactions');
+  AND tablename IN ('users', 'user_sessions', 'residents', 'interactions', 'registration_codes', 'password_reset_tokens')
+ORDER BY tablename;
 
--- 8. Test direct access
-SELECT 'Direct table access test' as test, count(*) as total_users FROM users;
-SELECT 'Admin user test' as test, username, first_name, last_name, email, asu_id, role, is_active FROM users WHERE username = 'admin';
-
--- 9. Show remaining policies (should be empty)
-SELECT 'Remaining policies (should be empty)' as info;
-SELECT schemaname, tablename, policyname 
-FROM pg_policies 
+SELECT 'Policies per table' as info;
+SELECT schemaname, tablename, policyname, permissive, roles
+FROM pg_policies
 WHERE schemaname = 'public' 
-  AND tablename IN ('residents', 'interactions', 'users', 'user_sessions');
+  AND tablename IN ('residents', 'interactions', 'users', 'user_sessions', 'registration_codes', 'password_reset_tokens')
+ORDER BY tablename, policyname;

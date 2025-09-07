@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { format } from 'date-fns';
+import { getCurrentUser } from '@/utils/auth';
 
 export async function GET(request: NextRequest) {
   try {
+    // Get the current authenticated user
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Create admin Supabase client for server-side operations
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,6 +34,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('week_starting', weekStarting)
+      .eq('user_id', currentUser.id) // Filter by current user
       .order('date', { ascending: true });
 
     if (error) {
@@ -58,6 +66,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Get the current authenticated user
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Create admin Supabase client for server-side operations
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -75,7 +89,8 @@ export async function POST(request: NextRequest) {
         is_submitted: true,
         updated_at: new Date().toISOString()
       })
-      .in('id', interactionIds);
+      .in('id', interactionIds)
+      .eq('user_id', currentUser.id); // Ensure user can only update their own interactions
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

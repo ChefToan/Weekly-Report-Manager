@@ -1,7 +1,8 @@
 'use client';
+// Updated: Grid width fixes applied - v3.0 with improved interaction cell layout
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Copy, UserPlus, Trash2, X, Edit3 } from 'lucide-react';
+import { Plus, Copy, UserPlus, Trash2, X, Edit2, Check } from 'lucide-react';
 import { sortResidentsByRoom } from '@/utils/roomSorting';
 import {
   useFloating,
@@ -14,8 +15,8 @@ import {
   useDismiss,
   useRole,
   useInteractions,
-  FloatingPortal,
 } from '@floating-ui/react';
+import InteractionPopover from './InteractionPopover';
 
 interface Resident {
   id: string;
@@ -31,8 +32,8 @@ interface Interaction {
   summary: string;
   details?: string;
   date: string;
-  column?: number; // Track which column this interaction belongs to
-  is_submitted?: boolean; // Track if interaction has been submitted
+  column?: number;
+  is_submitted?: boolean;
 }
 
 interface InteractionFormData {
@@ -44,6 +45,151 @@ interface ResidentsGridProps {
   onInteractionUpdate?: () => void;
 }
 
+const InteractionCell: React.FC<{
+  resident: Resident;
+  interaction: Interaction | null;
+  column: number;
+  isExpanded: boolean;
+  isAddingToCell: boolean;
+  isDeletingInteraction: boolean;
+  onToggleExpansion: (cellId: string) => void;
+  onAddClick: (residentId: string, column: number, event: React.MouseEvent) => void;
+  onEditClick: (interaction: Interaction, residentId: string, column: number, event: React.MouseEvent) => void;
+  onCopyClick: (text: string) => void;
+  onDeleteClick: (id: string) => void;
+}> = ({
+        resident,
+        interaction,
+        column,
+        isExpanded,
+        isAddingToCell,
+        isDeletingInteraction,
+        onToggleExpansion,
+        onAddClick,
+        onEditClick,
+        onCopyClick,
+        onDeleteClick,
+      }) => {
+  const cellId = `${resident.id}-${column}`;
+  const hasBorder = column < 3;
+
+  if (!interaction) {
+    return (
+        <td
+            className={`${hasBorder ? 'border-r border-gray-300 dark:border-gray-600' : ''} p-3 text-center relative`}
+            style={{ width: '250px', maxWidth: '250px' }}
+        >
+          <button
+              onClick={(e) => onAddClick(resident.id, column, e)}
+              disabled={isAddingToCell}
+              className="inline-flex items-center justify-center p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              title="Add interaction"
+          >
+            {isAddingToCell ? (
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 dark:border-gray-300" />
+            ) : (
+                <Plus className="h-3 w-3" />
+            )}
+          </button>
+        </td>
+    );
+  }
+
+  const isSubmitted = interaction.is_submitted || false;
+  const fullText = interaction.details || interaction.summary;
+
+  // Create preview text (first 50 characters)
+  const previewText = fullText.length > 25 ? fullText.substring(0, 25) + '...' : fullText;
+
+  return (
+      <td
+          className={`${hasBorder ? 'border-r border-gray-300 dark:border-gray-600' : ''} p-2 relative group ${
+              isSubmitted
+                  ? 'bg-green-50 dark:bg-green-900/20'
+                  : 'bg-yellow-50 dark:bg-yellow-900/20'
+          }`}
+          style={{ width: '250px', maxWidth: '250px' }}
+      >
+        <div className="flex gap-1">
+          {/* Main content area */}
+          <div className="flex-1 min-w-0">
+            <div className={`text-xs font-medium mb-1 ${
+                isSubmitted
+                    ? 'text-green-700 dark:text-green-400'
+                    : 'text-yellow-700 dark:text-yellow-400'
+            }`}>
+              {new Date(interaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              {isSubmitted && ' • Submitted'}
+            </div>
+            <div
+                className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer"
+                onClick={() => onToggleExpansion(cellId)}
+                title="Click to expand/collapse"
+            >
+              {isExpanded ? (
+                  // Expanded view - allow text to wrap properly
+                  <div className="whitespace-pre-wrap break-words">
+                    {fullText}
+                  </div>
+              ) : (
+                  // Preview view - truncated text
+                  <div className="truncate">
+                    {previewText}
+                  </div>
+              )}
+            </div>
+            {!isExpanded && fullText.length > 50 && (
+                <button
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline mt-1"
+                    onClick={() => onToggleExpansion(cellId)}
+                >
+                  Show more
+                </button>
+            )}
+            {isExpanded && (
+                <button
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline mt-1"
+                    onClick={() => onToggleExpansion(cellId)}
+                >
+                  Show less
+                </button>
+            )}
+          </div>
+
+          {/* Vertical button group - only visible on hover */}
+          <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+            <button
+                onClick={(e) => onEditClick(interaction, resident.id, column, e)}
+                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded"
+                title="Edit interaction"
+            >
+              <Edit2 className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+            </button>
+            <button
+                onClick={() => onDeleteClick(interaction.id)}
+                disabled={isDeletingInteraction}
+                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded"
+                title="Delete interaction"
+            >
+              {isDeletingInteraction ? (
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-500 dark:border-gray-400" />
+              ) : (
+                  <Trash2 className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+              )}
+            </button>
+            <button
+                onClick={() => onCopyClick(interaction.details || interaction.summary)}
+                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded"
+                title="Copy interaction"
+            >
+              <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+            </button>
+          </div>
+        </div>
+      </td>
+  );
+};
+
 export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProps) {
   const [residents, setResidents] = useState<Resident[]>([]);
   const [interactions, setInteractions] = useState<Record<string, Interaction[]>>({});
@@ -54,7 +200,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
     date: new Date().toISOString().split('T')[0]
   });
   const [showAddResidents, setShowAddResidents] = useState(false);
-  
+
   // Floating UI setup
   const { refs, floatingStyles, context } = useFloating({
     open: !!showPopover,
@@ -64,21 +210,21 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
     placement: 'bottom',
     strategy: 'fixed',
     middleware: [
-      offset(10), // Normal spacing between button and popover
-      flip({ 
+      offset(10),
+      flip({
         fallbackAxisSideDirection: "start",
         boundary: 'clippingAncestors',
-        padding: { 
-          top: 100, // Keep below header
+        padding: {
+          top: 100,
           bottom: 20,
           left: 10,
           right: 10
         }
       }),
-      shift({ 
+      shift({
         boundary: 'clippingAncestors',
-        padding: { 
-          top: 100, // Ensure it stays below header
+        padding: {
+          top: 100,
           bottom: 20,
           left: 10,
           right: 10
@@ -86,44 +232,15 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
       }),
       size({
         apply({ availableHeight, elements }) {
-          // Limit the popover to the area below the header
-          const headerHeight = 100; // Fixed header height + padding
+          const headerHeight = 100;
           const maxHeight = Math.max(200, availableHeight - headerHeight);
-          
+
           Object.assign(elements.floating.style, {
             maxHeight: `${maxHeight}px`,
             overflowY: 'auto',
           });
         },
       }),
-      // Custom middleware to ensure popover never goes above header and stays accessible
-      {
-        name: 'preventHeaderOverlap',
-        fn: ({ x, y, rects }) => {
-          const headerHeight = 100;
-          const minY = headerHeight + 10;
-          const viewportHeight = window.innerHeight;
-          const popoverHeight = rects.floating.height;
-          
-          // If the reference element (+ button) is above the header, 
-          // position the popover just below the header
-          if (rects.reference.y < headerHeight) {
-            return {
-              x: Math.min(Math.max(x, 10), window.innerWidth - rects.floating.width - 10),
-              y: minY,
-            };
-          }
-          
-          // If the popover would go below viewport, try to keep it visible
-          const maxY = viewportHeight - popoverHeight - 20;
-          const constrainedY = Math.max(minY, Math.min(y, maxY));
-          
-          return {
-            x: Math.min(Math.max(x, 10), window.innerWidth - rects.floating.width - 10),
-            y: constrainedY,
-          };
-        },
-      },
     ],
     whileElementsMounted: autoUpdate,
   });
@@ -146,7 +263,9 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
   const [expandedCells, setExpandedCells] = useState<Set<string>>(new Set());
   const [removingResidents, setRemovingResidents] = useState(false);
   const [addingInteraction, setAddingInteraction] = useState(false);
+  const [addingToCell, setAddingToCell] = useState<string | null>(null);
   const [editingInteraction, setEditingInteraction] = useState<{interactionId: string, residentId: string, column: number, isSubmitted: boolean} | null>(null);
+  const [deletingInteraction, setDeletingInteraction] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<InteractionFormData>({
     details: '',
     date: new Date().toISOString().split('T')[0]
@@ -167,21 +286,9 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
     return expandedCells.has(cellId);
   };
 
-  const getPreviewText = (text: string, maxLength: number = 20) => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
-  };
-
-  const getExpandedText = (text: string, maxLength: number = 150) => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
-  };
-
-
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      // You could add a toast notification here
     } catch {
       console.error('Failed to copy');
     }
@@ -210,8 +317,8 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
       });
 
       if (response.ok) {
-        await fetchResidents(); // Refresh the residents list
-        onInteractionUpdate?.(); // Update stats
+        await fetchResidents();
+        onInteractionUpdate?.();
         setImportFile(null);
         setShowAddResidents(false);
         const input = document.getElementById('additional-file-input') as HTMLInputElement;
@@ -254,11 +361,9 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         setShowAddResidents(false);
       } else {
         const data = await response.json();
-        console.error("Error occurred");
         alert('Failed to add resident: ' + (data.error || 'Unknown error'));
       }
     } catch {
-      console.error("Error occurred");
       alert('Network error occurred');
     } finally {
       setImporting(false);
@@ -277,7 +382,6 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
 
     setRemovingResidents(true);
     try {
-      // OPTIMIZED: Use batch delete API instead of individual requests
       const response = await fetch('/api/residents', {
         method: 'DELETE',
         headers: {
@@ -295,7 +399,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
 
       const result = await response.json();
       console.log(`Successfully deleted ${result.deletedIds?.length || selectedResidents.size} residents`);
-      
+
       await fetchResidents();
       onInteractionUpdate?.();
       setSelectedResidents(new Set());
@@ -322,35 +426,28 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
     fetchInteractions();
   }, []);
 
-  // Auto-focus textarea when popover opens (for both add and edit modes)
   useEffect(() => {
     if (showPopover || editingInteraction) {
-      // Use multiple attempts with increasing delays to ensure the popover is fully rendered
       const focusTextarea = (attempt = 0) => {
         if (textareaRef.current) {
           textareaRef.current.focus();
-          textareaRef.current.select(); // Also select the text if editing
+          textareaRef.current.select();
         } else if (attempt < 5) {
-          // Retry with increasing delay if element is not ready
           setTimeout(() => focusTextarea(attempt + 1), 50 + (attempt * 50));
         }
       };
-      
-      // Initial attempt with small delay
+
       const timer = setTimeout(() => focusTextarea(), 150);
       return () => clearTimeout(timer);
     }
   }, [showPopover, editingInteraction]);
 
-  // Remove the old useEffect for click outside - Floating UI handles this now
-
   const fetchResidents = async () => {
     try {
       const response = await fetch('/api/residents');
-      
+
       if (response.ok) {
         const data = await response.json();
-        // Sort residents by room before setting state
         const sortedResidents = sortResidentsByRoom(data || []);
         setResidents(sortedResidents);
       } else {
@@ -383,7 +480,6 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
   };
 
   const handlePopoverClick = (residentId: string, column: number, event: React.MouseEvent) => {
-    // Set the reference element for Floating UI
     refs.setReference(event.currentTarget as Element);
     setShowPopover({
       residentId,
@@ -392,7 +488,6 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
   };
 
   const handleEditInteraction = (interaction: Interaction, residentId: string, column: number, event: React.MouseEvent) => {
-    // Set the reference element for Floating UI positioning
     refs.setReference(event.currentTarget as Element);
     setEditingInteraction({
       interactionId: interaction.id,
@@ -404,6 +499,37 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
       details: interaction.details || '',
       date: interaction.date
     });
+  };
+
+  const handleDeleteInteraction = async (interactionId: string) => {
+    if (!confirm('Are you sure you want to delete this interaction?')) {
+      return;
+    }
+
+    setDeletingInteraction(interactionId);
+    try {
+      const response = await fetch(`/api/interactions/${interactionId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        await fetchInteractions();
+        onInteractionUpdate?.();
+      } else {
+        const responseText = await response.text();
+        console.error('Failed to delete interaction. Status:', response.status);
+        console.error('Response text:', responseText);
+        alert('Failed to delete interaction. Please try again.');
+      }
+    } catch {
+      console.error("Error occurred");
+      alert('Error occurred while deleting interaction. Please try again.');
+    } finally {
+      setDeletingInteraction(null);
+    }
   };
 
   const handleUpdateInteraction = async (markAsSubmitted = false) => {
@@ -420,13 +546,12 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         date: editFormData.date,
       };
 
-      // If marking as submitted, explicitly set the submission status
       if (markAsSubmitted) {
         requestBody.isSubmitted = true;
       }
 
       const response = await fetch(`/api/interactions/${editingInteraction.interactionId}`, {
-        method: markAsSubmitted ? 'PUT' : 'PATCH', // Use PUT for full updates when changing submission status
+        method: markAsSubmitted ? 'PUT' : 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -442,7 +567,6 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
           date: new Date().toISOString().split('T')[0]
         });
         if (markAsSubmitted) {
-          // Show success message for submission
           alert('Interaction updated and marked as submitted!');
         }
       } else {
@@ -460,16 +584,16 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
   const handleAddInteraction = async () => {
     if (!showPopover) return;
 
-    setAddingInteraction(true);
+    const cellKey = `${showPopover.residentId}-${showPopover.column}`;
+    setAddingToCell(cellKey);
+
     try {
-      // Find the resident to get their EMPL ID
       const resident = residents.find(r => r.id === showPopover.residentId);
       if (!resident) {
         console.error('Resident not found');
         return;
       }
 
-      // Calculate week starting date (Sunday of the selected date's week)
       const selectedDate = new Date(interactionFormData.date);
       const dayOfWeek = selectedDate.getDay();
       const weekStarting = new Date(selectedDate);
@@ -483,9 +607,8 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         date: interactionFormData.date,
         summary: `${interactionFormData.details.slice(0, 100)}${interactionFormData.details.length > 100 ? '...' : ''}`,
         details: interactionFormData.details,
-        column: showPopover.column // Include the column number
+        column: showPopover.column
       };
-
 
       const response = await fetch('/api/interactions', {
         method: 'POST',
@@ -494,7 +617,6 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         },
         body: JSON.stringify(requestBody),
       });
-
 
       if (response.ok) {
         await fetchInteractions();
@@ -508,759 +630,386 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         const responseText = await response.text();
         console.error('Failed to add interaction. Status:', response.status);
         console.error('Response text:', responseText);
-        try {
-          JSON.parse(responseText);
-          console.error("Error occurred");
-        } catch {
-          console.error("Error occurred");
-        }
       }
     } catch {
       console.error("Error occurred");
     } finally {
-      setAddingInteraction(false);
+      setAddingToCell(null);
     }
   };
 
   const getInteractionForColumn = (residentId: string, column: number): Interaction | null => {
     const residentInteractions = interactions[residentId] || [];
-    
-    // First, look for an interaction specifically assigned to this column
-    const columnInteraction = residentInteractions.find(interaction => 
-      interaction.column === column && interaction.column !== null && interaction.column !== undefined
+
+    const columnInteraction = residentInteractions.find(interaction =>
+        interaction.column === column && interaction.column !== null && interaction.column !== undefined
     );
     if (columnInteraction) {
       return columnInteraction;
     }
-    
-    // For interactions without column assignments, assign them to columns in order
-    const unassignedInteractions = residentInteractions.filter(interaction => 
-      !interaction.column || interaction.column === null || interaction.column === undefined
+
+    const unassignedInteractions = residentInteractions.filter(interaction =>
+        !interaction.column || interaction.column === null || interaction.column === undefined
     );
-    
+
     if (unassignedInteractions.length > 0 && column <= unassignedInteractions.length) {
       return unassignedInteractions[column - 1] || null;
     }
-    
+
     return null;
   };
 
   if (loading) {
     return (
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Loading Residents</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Please wait while we fetch the resident data...</p>
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Loading Residents</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Please wait while we fetch the resident data...</p>
+          </div>
         </div>
-      </div>
     );
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-      <div className="p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Residents interaction tracker</h2>
-        <div className="flex gap-2">
-          {selectedResidents.size > 0 && (
-            <button
-              onClick={handleRemoveSelected}
-              disabled={removingResidents}
-              className="flex items-center gap-2 px-3 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {removingResidents ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                  Removing...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="h-4 w-4" />
-                  Remove ({selectedResidents.size})
-                </>
-              )}
-            </button>
-          )}
-          <button
-            onClick={() => setShowAddResidents(!showAddResidents)}
-            className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            <UserPlus className="h-4 w-4" />
-            Add Residents
-          </button>
-        </div>
-      </div>
-
-      {/* Show import section when adding more residents */}
-      {showAddResidents && (
-        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border-b border-gray-200 dark:border-gray-600">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="flex rounded-md border border-blue-300 dark:border-blue-600">
-              <button
-                onClick={() => setAddMode('csv')}
-                className={`px-3 py-1 text-xs rounded-l-md ${
-                  addMode === 'csv' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800'
-                }`}
-              >
-                Import CSV
-              </button>
-              <button
-                onClick={() => setAddMode('manual')}
-                className={`px-3 py-1 text-xs rounded-r-md ${
-                  addMode === 'manual' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800'
-                }`}
-              >
-                Manual Entry
-              </button>
-            </div>
-          </div>
-
-          {addMode === 'csv' ? (
-            <div className="space-y-3">
-              <div className="text-sm text-blue-700 dark:text-blue-300">
-                Upload a CSV file with residents to add to your existing list
-              </div>
-              <div className="flex items-center gap-3">
-                <input
-                  id="additional-file-input"
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileSelect}
-                  className="block text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-white dark:file:bg-gray-700 file:text-blue-700 dark:file:text-blue-300 hover:file:bg-blue-50 dark:hover:file:bg-blue-800"
-                />
-                {importFile && (
-                  <button
-                    onClick={handleAdditionalImport}
-                    disabled={importing}
-                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {importing ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                        Importing...
-                      </>
-                    ) : (
-                      'Import CSV'
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Resident Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={manualResident.name}
-                    onChange={(e) => setManualResident(prev => ({...prev, name: e.target.value}))}
-                    placeholder="Enter full name"
-                    className="w-full px-3 py-2 text-sm text-gray-900 dark:text-gray-100 font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-500 dark:placeholder:text-gray-400 placeholder:font-normal"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Room Number *
-                  </label>
-                  <input
-                    type="text"
-                    value={manualResident.room}
-                    onChange={(e) => setManualResident(prev => ({...prev, room: e.target.value.toUpperCase()}))}
-                    placeholder="e.g., TKRA-0123-A1"
-                    className="w-full px-3 py-2 text-sm text-gray-900 dark:text-gray-100 font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-500 dark:placeholder:text-gray-400 placeholder:font-normal"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Student ID *
-                  </label>
-                  <input
-                    type="text"
-                    value={manualResident.empl_id}
-                    onChange={(e) => setManualResident(prev => ({...prev, empl_id: e.target.value}))}
-                    placeholder="Enter student ID"
-                    className="w-full px-3 py-2 text-sm text-gray-900 dark:text-gray-100 font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-500 dark:placeholder:text-gray-400 placeholder:font-normal"
-                  />
-                </div>
-                <div className="flex items-end">
-                  <button
-                    onClick={handleManualAdd}
-                    disabled={importing || !manualResident.name.trim() || !manualResident.empl_id.trim() || !manualResident.room.trim()}
-                    className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {importing ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                        Adding...
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="h-4 w-4" />
-                        Add Resident
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end mt-4">
-            <button
-              onClick={() => setShowAddResidents(false)}
-              className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 flex items-center gap-2"
-            >
-              <X className="h-4 w-4" />
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {residents.length === 0 ? (
-        <div className="p-8 text-center text-gray-500">
-          <p>No residents found. Please import resident data first.</p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto overflow-y-visible" style={{touchAction: 'pan-x'}}>
-          <table className="w-full border-collapse table-fixed min-w-[1000px]">
-            <thead>
-              <tr className="bg-blue-50 dark:bg-slate-700 border-b-2 border-gray-200 dark:border-gray-600">
-                <th className="border-r border-gray-300 dark:border-gray-600 p-3 text-center font-semibold text-gray-900 dark:text-gray-100 w-12">
-                  <input
-                    type="checkbox"
-                    checked={selectedResidents.size === residents.length && residents.length > 0}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedResidents(new Set(residents.map(r => r.id)));
-                      } else {
-                        setSelectedResidents(new Set());
-                      }
-                    }}
-                    className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-                  />
-                </th>
-                <th className="border-r border-gray-300 dark:border-gray-600 p-3 text-left font-semibold text-gray-900 dark:text-gray-100 w-[180px]">
-                  Resident Name
-                </th>
-                <th className="border-r border-gray-300 dark:border-gray-600 p-3 text-left font-semibold text-gray-900 dark:text-gray-100 w-[140px]">
-                  Room
-                </th>
-                <th className="border-r border-gray-300 dark:border-gray-600 p-3 text-left font-semibold text-gray-900 dark:text-gray-100 w-[130px]">
-                  ASU ID
-                </th>
-                <th className="border-r border-gray-300 dark:border-gray-600 p-3 text-center font-semibold text-gray-900 dark:text-gray-100 w-[200px]">
-                  Interaction 1
-                </th>
-                <th className="border-r border-gray-300 dark:border-gray-600 p-3 text-center font-semibold text-gray-900 dark:text-gray-100 w-[200px]">
-                  Interaction 2
-                </th>
-                <th className="p-3 text-center font-semibold text-gray-900 dark:text-gray-100 w-[200px]">
-                  Interaction 3
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {residents.map((resident, index) => {
-                const interaction1 = getInteractionForColumn(resident.id, 1);
-                const interaction2 = getInteractionForColumn(resident.id, 2);
-                const interaction3 = getInteractionForColumn(resident.id, 3);
-
-                return (
-                  <React.Fragment key={resident.id}>
-                    <tr className={`group ${index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700'} hover:bg-gray-100 dark:hover:bg-gray-600`}>
-                      <td className="border-r border-gray-300 dark:border-gray-600 p-3 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedResidents.has(resident.id)}
-                          onChange={() => toggleResidentSelection(resident.id)}
-                          className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-                        />
-                      </td>
-                      <td className="border-r border-gray-300 dark:border-gray-600 p-3 font-medium text-gray-900 dark:text-gray-100 w-[180px]">
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="truncate" title={resident.name}>{resident.name}</span>
-                          <button
-                            onClick={() => copyToClipboard(resident.name)}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded flex-shrink-0"
-                            title="Copy student name"
-                          >
-                            <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
-                          </button>
-                        </div>
-                      </td>
-                      <td className="border-r border-gray-300 dark:border-gray-600 p-3 text-gray-700 dark:text-gray-300 w-[140px]">
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="truncate" title={resident.room || 'N/A'}>{resident.room || 'N/A'}</span>
-                          {resident.room && (
-                            <button
-                              onClick={() => copyToClipboard(resident.room!)}
-                              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded flex-shrink-0"
-                              title="Copy room number"
-                            >
-                              <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                      <td className="border-r border-gray-300 dark:border-gray-600 p-3 text-gray-700 dark:text-gray-300 group w-[140px]">
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="truncate" title={resident.empl_id}>{resident.empl_id}</span>
-                          <button
-                            onClick={() => copyToClipboard(resident.empl_id)}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded flex-shrink-0"
-                            title="Copy student ID"
-                          >
-                            <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
-                          </button>
-                        </div>
-                      </td>
-                      
-                      {/* Interaction 1 */}
-                      <td className={`border-r border-gray-300 dark:border-gray-600 p-2 text-center relative group w-[200px] ${
-                        interaction1 
-                          ? interaction1.is_submitted 
-                            ? 'bg-green-100 dark:bg-green-900/30'
-                            : 'bg-yellow-100 dark:bg-yellow-900/30'
-                          : ''
-                      }`}>
-                        {interaction1 ? (
-                          <div className="relative w-full">
-                            <div 
-                              className={`text-xs p-2 flex flex-col justify-center relative cursor-pointer w-full ${
-                                isCellExpanded(`${resident.id}-1`) ? 'max-h-48' : 'max-h-16'
-                              } overflow-hidden ${
-                                interaction1.is_submitted 
-                                  ? 'text-green-900 dark:text-green-100'
-                                  : 'text-yellow-900 dark:text-yellow-100'
-                              }`}
-                              onClick={() => toggleCellExpansion(`${resident.id}-1`)}
-                            >
-                              <div 
-                                className={`text-center break-all leading-relaxed w-full overflow-wrap-anywhere max-w-full ${
-                                  interaction1.is_submitted 
-                                    ? 'text-green-900 dark:text-green-100'
-                                    : 'text-yellow-900 dark:text-yellow-100'
-                                }`}
-                                style={{wordBreak: 'break-all', overflowWrap: 'anywhere'}}
-                                title={isCellExpanded(`${resident.id}-1`) ? 'Click to collapse' : 'Click to expand full text'}
-                              >
-                                {isCellExpanded(`${resident.id}-1`) 
-                                  ? getExpandedText(interaction1.details || 'No details provided')
-                                  : getPreviewText(interaction1.details || 'No details provided')
-                                }
-                              </div>
-                              {(interaction1.details || 'No details provided').length > 10 && (
-                                <span 
-                                  className={`text-xs opacity-60 mt-1 cursor-pointer ${
-                                    interaction1.is_submitted 
-                                      ? 'text-green-600 dark:text-green-400'
-                                      : 'text-yellow-600 dark:text-yellow-400'
-                                  }`}
-                                  onClick={() => toggleCellExpansion(`${resident.id}-1`)}
-                                >
-                                  {isCellExpanded(`${resident.id}-1`) ? 'Click to collapse' : 'Click to expand'}
-                                </span>
-                              )}
-                            </div>
-                            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 flex gap-1 z-10">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditInteraction(interaction1, resident.id, 1, e);
-                                }}
-                                className={`p-1 rounded ${
-                                  interaction1.is_submitted 
-                                    ? 'hover:bg-green-200 dark:hover:bg-green-700'
-                                    : 'hover:bg-yellow-200 dark:hover:bg-yellow-700'
-                                }`}
-                                title="Edit interaction"
-                              >
-                                <Edit3 className={`h-3 w-3 ${
-                                  interaction1.is_submitted 
-                                    ? 'text-green-600 dark:text-green-400'
-                                    : 'text-yellow-600 dark:text-yellow-400'
-                                }`} />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  copyToClipboard(
-                                    interaction1.details || 'No details provided'
-                                  );
-                                }}
-                                className={`p-1 rounded ${
-                                  interaction1.is_submitted 
-                                    ? 'hover:bg-green-200 dark:hover:bg-green-700'
-                                    : 'hover:bg-yellow-200 dark:hover:bg-yellow-700'
-                                }`}
-                                title="Copy interaction details"
-                              >
-                                <Copy className={`h-3 w-3 ${
-                                  interaction1.is_submitted 
-                                    ? 'text-green-600 dark:text-green-400'
-                                    : 'text-yellow-600 dark:text-yellow-400'
-                                }`} />
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={(e) => handlePopoverClick(resident.id, 1, e)}
-                            className="w-6 h-6 border-2 border-gray-300 dark:border-gray-600 rounded hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-800 flex items-center justify-center mx-auto"
-                          >
-                            <Plus className="h-3 w-3 text-gray-400 dark:text-gray-500" />
-                          </button>
-                        )}
-                      </td>
-
-                      {/* Interaction 2 */}
-                      <td className={`border-r border-gray-300 dark:border-gray-600 p-2 text-center relative group w-[200px] ${
-                        interaction2 
-                          ? interaction2.is_submitted 
-                            ? 'bg-green-100 dark:bg-green-900/30'
-                            : 'bg-yellow-100 dark:bg-yellow-900/30'
-                          : ''
-                      }`}>
-                        {interaction2 ? (
-                          <div className="relative w-full">
-                            <div 
-                              className={`text-xs p-2 flex flex-col justify-center relative cursor-pointer w-full ${
-                                isCellExpanded(`${resident.id}-2`) ? 'max-h-48' : 'max-h-16'
-                              } overflow-hidden ${
-                                interaction2.is_submitted 
-                                  ? 'text-green-900 dark:text-green-100'
-                                  : 'text-yellow-900 dark:text-yellow-100'
-                              }`}
-                              onClick={() => toggleCellExpansion(`${resident.id}-2`)}
-                            >
-                              <div 
-                                className={`text-center break-all leading-relaxed w-full overflow-wrap-anywhere max-w-full ${
-                                  interaction2.is_submitted 
-                                    ? 'text-green-900 dark:text-green-100'
-                                    : 'text-yellow-900 dark:text-yellow-100'
-                                }`}
-                                style={{wordBreak: 'break-all', overflowWrap: 'anywhere'}}
-                                title={isCellExpanded(`${resident.id}-2`) ? 'Click to collapse' : 'Click to expand full text'}
-                              >
-                                {isCellExpanded(`${resident.id}-2`) 
-                                  ? getExpandedText(interaction2.details || 'No details provided')
-                                  : getPreviewText(interaction2.details || 'No details provided')
-                                }
-                              </div>
-                              {(interaction2.details || 'No details provided').length > 10 && (
-                                <span 
-                                  className={`text-xs opacity-60 mt-1 cursor-pointer ${
-                                    interaction2.is_submitted 
-                                      ? 'text-green-600 dark:text-green-400'
-                                      : 'text-yellow-600 dark:text-yellow-400'
-                                  }`}
-                                  onClick={() => toggleCellExpansion(`${resident.id}-2`)}
-                                >
-                                  {isCellExpanded(`${resident.id}-2`) ? 'Click to collapse' : 'Click to expand'}
-                                </span>
-                              )}
-                            </div>
-                            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 flex gap-1 z-10">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditInteraction(interaction2, resident.id, 2, e);
-                                }}
-                                className={`p-1 rounded ${
-                                  interaction2.is_submitted 
-                                    ? 'hover:bg-green-200 dark:hover:bg-green-700'
-                                    : 'hover:bg-yellow-200 dark:hover:bg-yellow-700'
-                                }`}
-                                title="Edit interaction"
-                              >
-                                <Edit3 className={`h-3 w-3 ${
-                                  interaction2.is_submitted 
-                                    ? 'text-green-600 dark:text-green-400'
-                                    : 'text-yellow-600 dark:text-yellow-400'
-                                }`} />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  copyToClipboard(
-                                    interaction2.details || 'No details provided'
-                                  );
-                                }}
-                                className={`p-1 rounded ${
-                                  interaction2.is_submitted 
-                                    ? 'hover:bg-green-200 dark:hover:bg-green-700'
-                                    : 'hover:bg-yellow-200 dark:hover:bg-yellow-700'
-                                }`}
-                                title="Copy interaction details"
-                              >
-                                <Copy className={`h-3 w-3 ${
-                                  interaction2.is_submitted 
-                                    ? 'text-green-600 dark:text-green-400'
-                                    : 'text-yellow-600 dark:text-yellow-400'
-                                }`} />
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={(e) => handlePopoverClick(resident.id, 2, e)}
-                            className="w-6 h-6 border-2 border-gray-300 dark:border-gray-600 rounded hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-800 flex items-center justify-center mx-auto"
-                          >
-                            <Plus className="h-3 w-3 text-gray-400 dark:text-gray-500" />
-                          </button>
-                        )}
-                      </td>
-
-                      {/* Interaction 3 */}
-                      <td className={`p-2 text-center relative group w-[200px] ${
-                        interaction3 
-                          ? interaction3.is_submitted 
-                            ? 'bg-green-100 dark:bg-green-900/30'
-                            : 'bg-yellow-100 dark:bg-yellow-900/30'
-                          : ''
-                      }`}>
-                        {interaction3 ? (
-                          <div className="relative w-full">
-                            <div 
-                              className={`text-xs p-2 flex flex-col justify-center relative cursor-pointer w-full ${
-                                isCellExpanded(`${resident.id}-3`) ? 'max-h-48' : 'max-h-16'
-                              } overflow-hidden ${
-                                interaction3.is_submitted 
-                                  ? 'text-green-900 dark:text-green-100'
-                                  : 'text-yellow-900 dark:text-yellow-100'
-                              }`}
-                              onClick={() => toggleCellExpansion(`${resident.id}-3`)}
-                            >
-                              <div 
-                                className={`text-center break-all leading-relaxed w-full overflow-wrap-anywhere max-w-full ${
-                                  interaction3.is_submitted 
-                                    ? 'text-green-900 dark:text-green-100'
-                                    : 'text-yellow-900 dark:text-yellow-100'
-                                }`}
-                                style={{wordBreak: 'break-all', overflowWrap: 'anywhere'}}
-                                title={isCellExpanded(`${resident.id}-3`) ? 'Click to collapse' : 'Click to expand full text'}
-                              >
-                                {isCellExpanded(`${resident.id}-3`) 
-                                  ? getExpandedText(interaction3.details || 'No details provided')
-                                  : getPreviewText(interaction3.details || 'No details provided')
-                                }
-                              </div>
-                              {(interaction3.details || 'No details provided').length > 10 && (
-                                <span 
-                                  className={`text-xs opacity-60 mt-1 cursor-pointer ${
-                                    interaction3.is_submitted 
-                                      ? 'text-green-600 dark:text-green-400'
-                                      : 'text-yellow-600 dark:text-yellow-400'
-                                  }`}
-                                  onClick={() => toggleCellExpansion(`${resident.id}-3`)}
-                                >
-                                  {isCellExpanded(`${resident.id}-3`) ? 'Click to collapse' : 'Click to expand'}
-                                </span>
-                              )}
-                            </div>
-                            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 flex gap-1 z-10">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditInteraction(interaction3, resident.id, 3, e);
-                                }}
-                                className={`p-1 rounded ${
-                                  interaction3.is_submitted 
-                                    ? 'hover:bg-green-200 dark:hover:bg-green-700'
-                                    : 'hover:bg-yellow-200 dark:hover:bg-yellow-700'
-                                }`}
-                                title="Edit interaction"
-                              >
-                                <Edit3 className={`h-3 w-3 ${
-                                  interaction3.is_submitted 
-                                    ? 'text-green-600 dark:text-green-400'
-                                    : 'text-yellow-600 dark:text-yellow-400'
-                                }`} />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  copyToClipboard(
-                                    interaction3.details || 'No details provided'
-                                  );
-                                }}
-                                className={`p-1 rounded ${
-                                  interaction3.is_submitted 
-                                    ? 'hover:bg-green-200 dark:hover:bg-green-700'
-                                    : 'hover:bg-yellow-200 dark:hover:bg-yellow-700'
-                                }`}
-                                title="Copy interaction details"
-                              >
-                                <Copy className={`h-3 w-3 ${
-                                  interaction3.is_submitted 
-                                    ? 'text-green-600 dark:text-green-400'
-                                    : 'text-yellow-600 dark:text-yellow-400'
-                                }`} />
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={(e) => handlePopoverClick(resident.id, 3, e)}
-                            className="w-6 h-6 border-2 border-gray-300 dark:border-gray-600 rounded hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-800 flex items-center justify-center mx-auto"
-                          >
-                            <Plus className="h-3 w-3 text-gray-400 dark:text-gray-500" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Popover for adding/editing interactions */}
-      {(showPopover || editingInteraction) && (
-        <FloatingPortal>
-          <div
-            ref={refs.setFloating}
-            style={floatingStyles}
-            className="z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-4 min-w-[400px]"
-            {...getFloatingProps()}
-          >
-            
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm text-gray-900 dark:text-gray-100">
-                {editingInteraction ? (
-                  <>
-                    <span className="font-semibold">Edit Interaction {editingInteraction.column}</span>
-                    <span className="font-normal text-gray-600 dark:text-gray-400"> for {residents.find(r => r.id === editingInteraction.residentId)?.name || 'Unknown'}</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="font-semibold">Add Interaction {showPopover?.column}</span>
-                    <span className="font-normal text-gray-600 dark:text-gray-400"> for {residents.find(r => r.id === showPopover?.residentId)?.name || 'Unknown'}</span>
-                  </>
-                )}
-              </h4>
-              <button
-                onClick={() => {
-                  setShowPopover(null);
-                  setEditingInteraction(null);
-                }}
-                className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 p-1"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Date
-                </label>
-                <input
-                  type="date"
-                  value={editingInteraction ? editFormData.date : interactionFormData.date}
-                  onChange={(e) => {
-                    if (editingInteraction) {
-                      setEditFormData(prev => ({...prev, date: e.target.value}));
-                    } else {
-                      setInteractionFormData(prev => ({...prev, date: e.target.value}));
-                    }
-                  }}
-                  className="w-full px-3 py-2 text-sm text-gray-900 dark:text-gray-100 font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Interaction Details
-                </label>
-                <textarea
-                  ref={textareaRef}
-                  value={editingInteraction ? editFormData.details : interactionFormData.details}
-                  onChange={(e) => {
-                    if (editingInteraction) {
-                      setEditFormData(prev => ({...prev, details: e.target.value}));
-                    } else {
-                      setInteractionFormData(prev => ({...prev, details: e.target.value}));
-                    }
-                  }}
-                  placeholder="Describe the interaction..."
-                  rows={6}
-                  className="w-full px-3 py-2 text-sm text-gray-900 dark:text-gray-100 font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-vertical placeholder:text-gray-500 dark:placeholder:text-gray-400 placeholder:font-normal"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-3 mt-4">
-              {/* First Row: Update and Cancel */}
-              <div className="flex gap-2">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Residents interaction tracker</h2>
+          <div className="flex gap-2">
+            {selectedResidents.size > 0 && (
                 <button
-                  onClick={() => editingInteraction ? handleUpdateInteraction(false) : handleAddInteraction()}
-                  disabled={
-                    editingInteraction 
-                      ? !editFormData.details.trim() || addingInteraction
-                      : !interactionFormData.details.trim() || addingInteraction
-                  }
-                  className="flex-1 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    onClick={handleRemoveSelected}
+                    disabled={removingResidents}
+                    className="flex items-center gap-2 px-3 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {addingInteraction ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                      {editingInteraction ? 'Updating...' : 'Adding...'}
-                    </>
+                  {removingResidents ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                        Removing...
+                      </>
                   ) : (
-                    editingInteraction ? 'Update' : 'Add'
+                      <>
+                        <Trash2 className="h-4 w-4" />
+                        Remove ({selectedResidents.size})
+                      </>
                   )}
                 </button>
+            )}
+            <button
+                onClick={() => setShowAddResidents(!showAddResidents)}
+                className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              <UserPlus className="h-4 w-4" />
+              Add Residents
+            </button>
+          </div>
+        </div>
 
+        {showAddResidents && (
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border-b border-gray-200 dark:border-gray-600">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex rounded-md border border-blue-300 dark:border-blue-600">
+                  <button
+                      onClick={() => setAddMode('csv')}
+                      className={`px-3 py-1 text-xs rounded-l-md ${
+                          addMode === 'csv'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800'
+                      }`}
+                  >
+                    Import CSV
+                  </button>
+                  <button
+                      onClick={() => setAddMode('manual')}
+                      className={`px-3 py-1 text-xs rounded-r-md ${
+                          addMode === 'manual'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800'
+                      }`}
+                  >
+                    Manual Entry
+                  </button>
+                </div>
+              </div>
+
+              {addMode === 'csv' ? (
+                  <div className="space-y-3">
+                    <div className="text-sm text-blue-700 dark:text-blue-300">
+                      Upload a CSV file with residents to add to your existing list
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input
+                          id="additional-file-input"
+                          type="file"
+                          accept=".csv"
+                          onChange={handleFileSelect}
+                          className="block text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-white dark:file:bg-gray-700 file:text-blue-700 dark:file:text-blue-300 hover:file:bg-blue-50 dark:hover:file:bg-blue-800"
+                      />
+                      {importFile && (
+                          <button
+                              onClick={handleAdditionalImport}
+                              disabled={importing}
+                              className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          >
+                            {importing ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                                  Importing...
+                                </>
+                            ) : (
+                                'Import CSV'
+                            )}
+                          </button>
+                      )}
+                    </div>
+                  </div>
+              ) : (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Resident Name *
+                        </label>
+                        <input
+                            type="text"
+                            value={manualResident.name}
+                            onChange={(e) => setManualResident(prev => ({...prev, name: e.target.value}))}
+                            placeholder="Enter full name"
+                            className="w-full px-3 py-2 text-sm text-gray-900 dark:text-gray-100 font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-500 dark:placeholder:text-gray-400 placeholder:font-normal"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Room Number *
+                        </label>
+                        <input
+                            type="text"
+                            value={manualResident.room}
+                            onChange={(e) => setManualResident(prev => ({...prev, room: e.target.value.toUpperCase()}))}
+                            placeholder="e.g., TKRA-0123-A1"
+                            className="w-full px-3 py-2 text-sm text-gray-900 dark:text-gray-100 font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-500 dark:placeholder:text-gray-400 placeholder:font-normal"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Student ID *
+                        </label>
+                        <input
+                            type="text"
+                            value={manualResident.empl_id}
+                            onChange={(e) => setManualResident(prev => ({...prev, empl_id: e.target.value}))}
+                            placeholder="Enter student ID"
+                            className="w-full px-3 py-2 text-sm text-gray-900 dark:text-gray-100 font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-500 dark:placeholder:text-gray-400 placeholder:font-normal"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <button
+                            onClick={handleManualAdd}
+                            disabled={importing || !manualResident.name.trim() || !manualResident.empl_id.trim() || !manualResident.room.trim()}
+                            className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {importing ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                                Adding...
+                              </>
+                          ) : (
+                              <>
+                                <Plus className="h-4 w-4" />
+                                Add Resident
+                              </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+              )}
+
+              <div className="flex justify-end mt-4">
                 <button
-                  onClick={() => {
-                    setShowPopover(null);
-                    setEditingInteraction(null);
-                  }}
-                  className="px-6 py-2 text-sm bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-400 dark:hover:bg-gray-500"
+                    onClick={() => setShowAddResidents(false)}
+                    className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 flex items-center gap-2"
                 >
+                  <X className="h-4 w-4" />
                   Cancel
                 </button>
               </div>
-
-              {/* Second Row: Mark as Submitted (only for edit mode and not already submitted) */}
-              {editingInteraction && !editingInteraction.isSubmitted && (
-                <button
-                  onClick={() => handleUpdateInteraction(true)}
-                  disabled={!editFormData.details.trim() || addingInteraction}
-                  className="w-full px-3 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  title="Update interaction and mark as submitted"
-                >
-                  {addingInteraction ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                      Submitting...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Mark as Submitted
-                    </>
-                  )}
-                </button>
-              )}
             </div>
-          </div>
-        </FloatingPortal>
-      )}
+        )}
 
-    </div>
+        {residents.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              <p>No residents found. Please import resident data first.</p>
+            </div>
+        ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse min-w-full">
+                <thead>
+                <tr className="bg-blue-50 dark:bg-slate-700 border-b-2 border-gray-200 dark:border-gray-600">
+                  <th className="border-r border-gray-300 dark:border-gray-600 p-3 text-center font-semibold text-gray-900 dark:text-gray-100 w-10">
+                    <input
+                        type="checkbox"
+                        checked={selectedResidents.size === residents.length && residents.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedResidents(new Set(residents.map(r => r.id)));
+                          } else {
+                            setSelectedResidents(new Set());
+                          }
+                        }}
+                        className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+                    />
+                  </th>
+                  <th className="border-r border-gray-300 dark:border-gray-600 p-3 text-left font-semibold text-gray-900 dark:text-gray-100 w-44">
+                    Resident Name
+                  </th>
+                  <th className="border-r border-gray-300 dark:border-gray-600 p-3 text-left font-semibold text-gray-900 dark:text-gray-100 w-32">
+                    Room
+                  </th>
+                  <th className="border-r border-gray-300 dark:border-gray-600 p-3 text-left font-semibold text-gray-900 dark:text-gray-100 w-28">
+                    ASU ID
+                  </th>
+                  <th className="border-r border-gray-300 dark:border-gray-600 p-3 text-center font-semibold text-gray-900 dark:text-gray-100 w-64">
+                    Interaction 1
+                  </th>
+                  <th className="border-r border-gray-300 dark:border-gray-600 p-3 text-center font-semibold text-gray-900 dark:text-gray-100 w-64">
+                    Interaction 2
+                  </th>
+                  <th className="p-3 text-center font-semibold text-gray-900 dark:text-gray-100 w-64">
+                    Interaction 3
+                  </th>
+                </tr>
+                </thead>
+                <tbody>
+                {residents.map((resident, index) => {
+                  const interaction1 = getInteractionForColumn(resident.id, 1);
+                  const interaction2 = getInteractionForColumn(resident.id, 2);
+                  const interaction3 = getInteractionForColumn(resident.id, 3);
+
+                  return (
+                      <tr key={resident.id} className={`${index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700'} hover:bg-gray-100 dark:hover:bg-gray-600`}>
+                        <td className="border-r border-gray-300 dark:border-gray-600 p-3 text-center">
+                          <input
+                              type="checkbox"
+                              checked={selectedResidents.has(resident.id)}
+                              onChange={() => toggleResidentSelection(resident.id)}
+                              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+                          />
+                        </td>
+                        <td className="border-r border-gray-300 dark:border-gray-600 p-3 font-medium text-gray-900 dark:text-gray-100 group">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate" title={resident.name}>{resident.name}</span>
+                            <button
+                                onClick={() => copyToClipboard(resident.name)}
+                                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded flex-shrink-0"
+                                title="Copy student name"
+                            >
+                              <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="border-r border-gray-300 dark:border-gray-600 p-3 text-gray-700 dark:text-gray-300 group">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate" title={resident.room || 'N/A'}>{resident.room || 'N/A'}</span>
+                            {resident.room && (
+                                <button
+                                    onClick={() => copyToClipboard(resident.room!)}
+                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded flex-shrink-0"
+                                    title="Copy room number"
+                                >
+                                  <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                                </button>
+                            )}
+                          </div>
+                        </td>
+                        <td className="border-r border-gray-300 dark:border-gray-600 p-3 text-gray-700 dark:text-gray-300 group">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate" title={resident.empl_id}>{resident.empl_id}</span>
+                            <button
+                                onClick={() => copyToClipboard(resident.empl_id)}
+                                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded flex-shrink-0"
+                                title="Copy student ID"
+                            >
+                              <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                            </button>
+                          </div>
+                        </td>
+
+                        <InteractionCell
+                            resident={resident}
+                            interaction={interaction1}
+                            column={1}
+                            isExpanded={isCellExpanded(`${resident.id}-1`)}
+                            isAddingToCell={addingToCell === `${resident.id}-1`}
+                            isDeletingInteraction={deletingInteraction === interaction1?.id}
+                            onToggleExpansion={toggleCellExpansion}
+                            onAddClick={handlePopoverClick}
+                            onEditClick={handleEditInteraction}
+                            onCopyClick={(text) => void copyToClipboard(text)}
+                            onDeleteClick={(id) => void handleDeleteInteraction(id)}
+                        />
+
+                        <InteractionCell
+                            resident={resident}
+                            interaction={interaction2}
+                            column={2}
+                            isExpanded={isCellExpanded(`${resident.id}-2`)}
+                            isAddingToCell={addingToCell === `${resident.id}-2`}
+                            isDeletingInteraction={deletingInteraction === interaction2?.id}
+                            onToggleExpansion={toggleCellExpansion}
+                            onAddClick={handlePopoverClick}
+                            onEditClick={handleEditInteraction}
+                            onCopyClick={(text) => void copyToClipboard(text)}
+                            onDeleteClick={(id) => void handleDeleteInteraction(id)}
+                        />
+
+                        <InteractionCell
+                            resident={resident}
+                            interaction={interaction3}
+                            column={3}
+                            isExpanded={isCellExpanded(`${resident.id}-3`)}
+                            isAddingToCell={addingToCell === `${resident.id}-3`}
+                            isDeletingInteraction={deletingInteraction === interaction3?.id}
+                            onToggleExpansion={toggleCellExpansion}
+                            onAddClick={handlePopoverClick}
+                            onEditClick={handleEditInteraction}
+                            onCopyClick={(text) => void copyToClipboard(text)}
+                            onDeleteClick={(id) => void handleDeleteInteraction(id)}
+                        />
+                      </tr>
+                  );
+                })}
+                </tbody>
+              </table>
+            </div>
+        )}
+
+        {/* Popover for adding/editing interactions */}
+        <InteractionPopover
+            floatingRefs={refs}
+            floatingStyles={floatingStyles}
+            getFloatingProps={getFloatingProps}
+            mode={editingInteraction ? 'edit' : 'add'}
+            showPopover={showPopover}
+            editingInteraction={editingInteraction}
+            residents={residents}
+            interactionFormData={interactionFormData}
+            editFormData={editFormData}
+            addingInteraction={addingInteraction}
+            onClose={() => {
+              setShowPopover(null);
+              setEditingInteraction(null);
+            }}
+            onInteractionFormDataChange={(data) =>
+                setInteractionFormData(prev => ({...prev, ...data}))
+            }
+            onEditFormDataChange={(data) =>
+                setEditFormData(prev => ({...prev, ...data}))
+            }
+            onAddInteraction={handleAddInteraction}
+            onUpdateInteraction={handleUpdateInteraction}
+        />
+
+      </div>
   );
 }

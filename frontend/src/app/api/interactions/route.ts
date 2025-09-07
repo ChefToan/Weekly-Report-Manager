@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getCurrentUser } from '@/utils/auth';
 
 export async function GET(request: NextRequest) {
   try {
+    // Get the current authenticated user
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Use service role key for server-side operations to bypass RLS
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,6 +30,7 @@ export async function GET(request: NextRequest) {
           empl_id
         )
       `)
+      .eq('user_id', currentUser.id) // Filter by current user
       .order('date', { ascending: false });
 
     if (weekStarting) {
@@ -52,6 +60,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Get the current authenticated user
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Use service role key for server-side operations to bypass RLS
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -62,6 +76,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('interactions')
       .insert({
+        user_id: currentUser.id, // Associate with current user
         resident_id: body.residentId,
         resident_empl_id: body.residentEmplId,
         week_starting: body.weekStarting,

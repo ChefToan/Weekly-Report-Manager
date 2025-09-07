@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getCurrentUser } from '@/utils/auth';
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Get the current authenticated user
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Use service role key for server-side operations to bypass RLS
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,6 +61,7 @@ export async function PUT(
       .from('interactions')
       .update(updateData)
       .eq('id', id)
+      .eq('user_id', currentUser.id) // Ensure user can only update their own interactions
       .select(`
         *,
         residents (
@@ -79,6 +87,12 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Get the current authenticated user
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Use service role key for server-side operations to bypass RLS
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -92,6 +106,7 @@ export async function PATCH(
       .from('interactions')
       .select('is_submitted')
       .eq('id', id)
+      .eq('user_id', currentUser.id) // Ensure user can only access their own interactions
       .single();
 
     if (fetchError) {
@@ -124,6 +139,7 @@ export async function PATCH(
       .from('interactions')
       .update(updateData)
       .eq('id', id)
+      .eq('user_id', currentUser.id) // Ensure user can only update their own interactions
       .select(`
         *,
         residents (
@@ -149,6 +165,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Get the current authenticated user
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Use service role key for server-side operations to bypass RLS
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -159,7 +181,8 @@ export async function DELETE(
     const { error } = await supabase
       .from('interactions')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', currentUser.id); // Ensure user can only delete their own interactions
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

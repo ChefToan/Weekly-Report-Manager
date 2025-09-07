@@ -18,7 +18,6 @@ type AdminTabType = 'users' | 'codes';
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [adminActiveTab, setAdminActiveTab] = useState<AdminTabType>('users');
-  const [gridRefreshTrigger, setGridRefreshTrigger] = useState(0);
   const [statsRefreshTrigger, setStatsRefreshTrigger] = useState(0);
   const { user, logout } = useAuth();
 
@@ -38,7 +37,6 @@ export default function HomePage() {
 
   const handleInteractionUpdate = () => {
     setStatsRefreshTrigger(prev => prev + 1);
-    setGridRefreshTrigger(prev => prev + 1);
   };
 
   const handleTabChange = (newTab: TabType) => {
@@ -157,7 +155,6 @@ export default function HomePage() {
         return (
           <div className="space-y-6">
             <ResidentsGrid
-              key={gridRefreshTrigger}
               onInteractionUpdate={handleInteractionUpdate}
             />
           </div>

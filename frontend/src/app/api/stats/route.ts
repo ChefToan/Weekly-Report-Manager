@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getCurrentUser } from '@/utils/auth';
 
 export async function GET() {
   try {
+    // Get the current authenticated user
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
     const [residentsResult, interactionsResult] = await Promise.all([
-      supabase.from('residents').select('id, empl_id, name, room'),
-      supabase.from('interactions').select('resident_id, resident_empl_id')
+      supabase.from('residents').select('id, empl_id, name, room').eq('user_id', currentUser.id),
+      supabase.from('interactions').select('resident_id, resident_empl_id').eq('user_id', currentUser.id)
     ]);
 
     if (residentsResult.error) {

@@ -2,6 +2,7 @@
 -- WARNING: This will permanently delete ALL data
 
 -- Drop tables in correct order (foreign keys first)
+DROP TABLE IF EXISTS password_reset_tokens CASCADE;
 DROP TABLE IF EXISTS user_sessions CASCADE;
 DROP TABLE IF EXISTS registration_codes CASCADE;
 DROP TABLE IF EXISTS interactions CASCADE;
@@ -12,6 +13,9 @@ DROP TABLE IF EXISTS users CASCADE;
 DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
 DROP FUNCTION IF EXISTS cleanup_expired_auth() CASCADE;
 DROP FUNCTION IF EXISTS cleanup_expired_codes() CASCADE;
+DROP FUNCTION IF EXISTS cleanup_expired_reset_tokens() CASCADE;
+DROP FUNCTION IF EXISTS generate_registration_code() CASCADE;
+DROP FUNCTION IF EXISTS set_resident_user_id() CASCADE;
 
 -- Drop extensions (optional)
 -- DROP EXTENSION IF EXISTS "uuid-ossp";

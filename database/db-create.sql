@@ -8,34 +8,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- CORE SCHEMA
 -- =====================================================
 
--- Residents table
-CREATE TABLE residents (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  empl_id VARCHAR(10) UNIQUE NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  email VARCHAR(255),
-  room VARCHAR(100),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Interactions table
-CREATE TABLE interactions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  resident_id UUID REFERENCES residents(id) ON DELETE CASCADE,
-  resident_empl_id VARCHAR(10) NOT NULL,
-  date DATE NOT NULL,
-  summary TEXT NOT NULL,
-  details TEXT,
-  is_submitted BOOLEAN DEFAULT FALSE,
-  week_starting DATE NOT NULL,
-  "column" INTEGER,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
 -- =====================================================
--- AUTHENTICATION SCHEMA
+-- AUTHENTICATION SCHEMA (Must be created first for foreign keys)
 -- =====================================================
 
 -- Users table with role-based access and personal information
@@ -50,6 +24,39 @@ CREATE TABLE users (
   role VARCHAR(20) DEFAULT 'user' NOT NULL CHECK (role IN ('admin', 'user')),
   is_active BOOLEAN DEFAULT TRUE,
   last_login TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- =====================================================
+-- CORE SCHEMA
+-- =====================================================
+
+-- Residents table
+CREATE TABLE residents (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  empl_id VARCHAR(10) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255),
+  room VARCHAR(100),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (user_id, empl_id)
+);
+
+-- Interactions table
+CREATE TABLE interactions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  resident_id UUID REFERENCES residents(id) ON DELETE CASCADE,
+  resident_empl_id VARCHAR(10) NOT NULL,
+  date DATE NOT NULL,
+  summary TEXT NOT NULL,
+  details TEXT,
+  is_submitted BOOLEAN DEFAULT FALSE,
+  week_starting DATE NOT NULL,
+  "column" INTEGER,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -80,8 +87,9 @@ CREATE TABLE registration_codes (
 CREATE TABLE password_reset_tokens (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  token VARCHAR(64) UNIQUE NOT NULL,
+  token VARCHAR(255) UNIQUE NOT NULL,
   expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  used BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(user_id)
 );
@@ -91,8 +99,9 @@ CREATE TABLE password_reset_tokens (
 -- =====================================================
 
 -- Core table indexes
-CREATE INDEX idx_residents_empl_id ON residents(empl_id);
+CREATE INDEX idx_residents_user_id ON residents(user_id);
 CREATE INDEX idx_residents_room ON residents(room);
+CREATE INDEX idx_interactions_user_id ON interactions(user_id);
 CREATE INDEX idx_interactions_resident_id ON interactions(resident_id);
 CREATE INDEX idx_interactions_resident_empl_id ON interactions(resident_empl_id);
 CREATE INDEX idx_interactions_week_starting ON interactions(week_starting);
@@ -136,12 +145,31 @@ ALTER TABLE user_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE registration_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
 
--- Core table policies - Allow all operations for authenticated users
-CREATE POLICY "Allow all operations for authenticated users" ON residents
-  FOR ALL USING (auth.role() = 'authenticated');
+-- Residents policies - User-specific access
+CREATE POLICY "Users can only see their own residents" ON residents
+  FOR SELECT USING (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
 
-CREATE POLICY "Allow all operations for authenticated users" ON interactions
-  FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "Users can only create their own residents" ON residents
+  FOR INSERT WITH CHECK (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+CREATE POLICY "Users can only update their own residents" ON residents
+  FOR UPDATE USING (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+CREATE POLICY "Users can only delete their own residents" ON residents
+  FOR DELETE USING (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+-- Interactions policies - User-specific access
+CREATE POLICY "Users can only see their own interactions" ON interactions
+  FOR SELECT USING (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+CREATE POLICY "Users can only create their own interactions" ON interactions
+  FOR INSERT WITH CHECK (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+CREATE POLICY "Users can only update their own interactions" ON interactions
+  FOR UPDATE USING (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
+
+CREATE POLICY "Users can only delete their own interactions" ON interactions
+  FOR DELETE USING (auth.role() = 'service_role' OR user_id = auth.uid()::uuid);
 
 -- Authentication table policies
 CREATE POLICY "Users can read their own data" ON users
@@ -174,7 +202,21 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Triggers to automatically update updated_at
+-- Auto-assign residents.user_id from current auth context when not provided
+CREATE OR REPLACE FUNCTION set_resident_user_id()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.user_id IS NULL THEN
+    NEW.user_id = auth.uid()::uuid;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Triggers to automatically set user_id and updated_at
+CREATE TRIGGER set_residents_user_id BEFORE INSERT ON residents
+  FOR EACH ROW EXECUTE FUNCTION set_resident_user_id();
+
 CREATE TRIGGER update_residents_updated_at BEFORE UPDATE ON residents
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -212,7 +254,7 @@ $$ language 'plpgsql';
 CREATE OR REPLACE FUNCTION cleanup_expired_reset_tokens()
 RETURNS void AS $$
 BEGIN
-  DELETE FROM password_reset_tokens WHERE expires_at < NOW();
+  DELETE FROM password_reset_tokens WHERE expires_at < NOW() OR used = true;
 END;
 $$ language 'plpgsql';
 
@@ -256,11 +298,11 @@ VALUES (
 
 -- Insert sample residents (uncomment if you want test data)
 /*
-INSERT INTO residents (empl_id, name, email, room) VALUES
-  ('1234567890', 'John Smith', 'john.smith@asu.edu', 'TKRB-0101-A1'),
-  ('0987654321', 'Jane Doe', 'jane.doe@asu.edu', 'TKRB-0102-B2'),
-  ('1122334455', 'Mike Johnson', 'mike.johnson@asu.edu', 'TKRB-0103-C3')
-ON CONFLICT (empl_id) DO NOTHING;
+INSERT INTO residents (user_id, empl_id, name, email, room) VALUES
+  ((SELECT id FROM users WHERE username = 'admin' LIMIT 1), '1234567890', 'John Smith', 'john.smith@asu.edu', 'TKRB-0101-A1'),
+  ((SELECT id FROM users WHERE username = 'admin' LIMIT 1), '0987654321', 'Jane Doe', 'jane.doe@asu.edu', 'TKRB-0102-B2'),
+  ((SELECT id FROM users WHERE username = 'admin' LIMIT 1), '1122334455', 'Mike Johnson', 'mike.johnson@asu.edu', 'TKRB-0103-C3')
+ON CONFLICT (user_id, empl_id) DO NOTHING;
 */
 
 -- Create a sample registration code for testing (expires in 24 hours)
@@ -325,9 +367,10 @@ SELECT
   'Available functions:' as info,
   proname as function_name
 FROM pg_proc 
-WHERE proname IN ('cleanup_expired_auth', 'cleanup_expired_codes', 'generate_registration_code', 'update_updated_at_column');
+WHERE proname IN ('cleanup_expired_auth', 'cleanup_expired_codes', 'generate_registration_code', 'update_updated_at_column', 'set_resident_user_id');
 
 -- Final status
 SELECT 
   '✅ Database initialization complete!' as status,
   'Ready for application use' as message;
+

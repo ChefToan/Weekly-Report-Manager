@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { parse } from 'papaparse';
+import { getCurrentUser } from '../../../../utils/auth';
 
 interface ResidentCSVRow {
   'first name'?: string;
@@ -22,11 +23,18 @@ interface ResidentCSVRow {
 
 export async function POST(request: NextRequest) {
   try {
+    // Resolve the current authenticated app user
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Use service role key for server-side operations to bypass RLS
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
@@ -42,7 +50,6 @@ export async function POST(request: NextRequest) {
       skipEmptyLines: true,
       // Don't transform headers - keep original case
     });
-
 
     if (errors.length > 0) {
       return NextResponse.json({ 
@@ -118,16 +125,14 @@ export async function POST(request: NextRequest) {
       const room = roomValue ? roomValue.toUpperCase() : null;
       
 
-
       return {
+        user_id: user.id,
         name: fullName,
         empl_id: id,
         email: email,
-        room: room || null, // Ensure we don't pass undefined
+        room: room || null,
       };
     }).filter(resident => resident.name && resident.empl_id);
-
-    // Debug logging for room numbers
 
     if (residents.length === 0) {
       return NextResponse.json({ 
@@ -138,8 +143,8 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('residents')
       .upsert(residents, { 
-        onConflict: 'empl_id',
-        ignoreDuplicates: false 
+        onConflict: 'user_id,empl_id',
+        ignoreDuplicates: false
       })
       .select();
 

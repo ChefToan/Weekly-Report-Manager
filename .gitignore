@@ -79,8 +79,4 @@ config/production.json
 cookies.txt
 
 # Documentation files to exclude
-DEPLOYMENT_GUIDE.md
-SECURITY_AUDIT.md
-CI-CD-SETUP.md
-OPTIMIZATIONS-APPLIED.md
-SERVER-SETUP.md
+CLAUDE.md

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getCurrentUser } from '@/utils/auth';
-import { attachHeaders, cacheHeaders, getCachedJSON, getVersion, makeETag, setCachedJSON } from '@/lib/cache';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,20 +10,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const v = await getVersion('stats', currentUser.id);
-    const etag = makeETag([currentUser.id, 'stats', v]);
-
-    const ifNoneMatch = request.headers.get('if-none-match');
-    if (ifNoneMatch && ifNoneMatch === etag) {
-      const notMod = new NextResponse(null, { status: 304 });
-      return attachHeaders(notMod, { ...cacheHeaders('stats'), ETag: etag });
-    }
-
-    const cached = await getCachedJSON<any>('stats', [currentUser.id, v]);
-    if (cached) {
-      const res = NextResponse.json(cached);
-      return attachHeaders(res, { ...cacheHeaders('stats'), ETag: etag });
-    }
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -82,10 +67,7 @@ export async function GET(request: NextRequest) {
       residentsData,
     };
 
-    await setCachedJSON('stats', [currentUser.id, v], stats);
-
-    const res = NextResponse.json(stats);
-    return attachHeaders(res, { ...cacheHeaders('stats'), ETag: etag });
+    return NextResponse.json(stats);
   } catch (error) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

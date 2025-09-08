@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getCurrentUser } from '@/utils/auth';
-import { attachHeaders, cacheHeaders, makeETag, getCachedJSON, setCachedJSON, getVersion, bumpVersion } from '@/lib/cache';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,21 +15,6 @@ export async function GET(request: NextRequest) {
     const residentId = searchParams.get('residentId');
     const submitted = searchParams.get('submitted');
 
-    const v = await getVersion('interactions', currentUser.id);
-    const etag = makeETag([currentUser.id, 'interactions', v, weekStarting || '', residentId || '', submitted || '']);
-
-    const ifNoneMatch = request.headers.get('if-none-match');
-    if (ifNoneMatch && ifNoneMatch === etag) {
-      const notMod = new NextResponse(null, { status: 304 });
-      return attachHeaders(notMod, { ...cacheHeaders('interactions'), ETag: etag });
-    }
-
-    const cacheKeyParts = [currentUser.id, v, weekStarting || '', residentId || '', submitted || ''];
-    const cached = await getCachedJSON<any[]>('interactions', cacheKeyParts);
-    if (cached) {
-      const res = NextResponse.json(cached);
-      return attachHeaders(res, { ...cacheHeaders('interactions'), ETag: etag });
-    }
 
     // Use service role key for server-side operations to bypass RLS
     const supabase = createClient(
@@ -70,10 +54,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    await setCachedJSON('interactions', cacheKeyParts, interactions);
-
-    const res = NextResponse.json(interactions);
-    return attachHeaders(res, { ...cacheHeaders('interactions'), ETag: etag });
+    return NextResponse.json(interactions);
   } catch (error) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
@@ -120,10 +101,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Invalidate caches
-    await bumpVersion('interactions', currentUser.id);
-    await bumpVersion('stats', currentUser.id);
-    await bumpVersion('reports-weekly', currentUser.id);
 
     return NextResponse.json(data);
   } catch (error) {

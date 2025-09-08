@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getCurrentUser } from '@/utils/auth';
-import { attachHeaders, cacheHeaders, makeETag, getCachedJSON, setCachedJSON, getVersion, bumpVersion } from '@/lib/cache';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,21 +9,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const v = await getVersion('residents', currentUser.id);
-    const etag = makeETag([currentUser.id, 'residents', v]);
-
-    const ifNoneMatch = request.headers.get('if-none-match');
-    if (ifNoneMatch && ifNoneMatch === etag) {
-      const notMod = new NextResponse(null, { status: 304 });
-      return attachHeaders(notMod, { ...cacheHeaders('residents'), ETag: etag });
-    }
-
-    // Try Redis cache
-    const cached = await getCachedJSON<any[]>('residents', [currentUser.id, v]);
-    if (cached) {
-      const res = NextResponse.json(cached);
-      return attachHeaders(res, { ...cacheHeaders('residents'), ETag: etag });
-    }
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -41,10 +25,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    await setCachedJSON('residents', [currentUser.id, v], residents);
-
-    const res = NextResponse.json(residents);
-    return attachHeaders(res, { ...cacheHeaders('residents'), ETag: etag });
+    return NextResponse.json(residents);
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
@@ -81,9 +62,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Invalidate caches
-    await bumpVersion('residents', currentUser.id);
-    await bumpVersion('stats', currentUser.id);
 
     return NextResponse.json(data);
   } catch {
@@ -135,11 +113,6 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Invalidate caches
-    await bumpVersion('residents', currentUser.id);
-    await bumpVersion('interactions', currentUser.id);
-    await bumpVersion('stats', currentUser.id);
-    await bumpVersion('reports-weekly', currentUser.id);
 
     return NextResponse.json({
       message: `Successfully deleted ${data?.length || 0} residents`,

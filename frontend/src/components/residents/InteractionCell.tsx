@@ -6,8 +6,7 @@ import { Plus, Copy, Edit3, Trash, Loader2 } from 'lucide-react';
 interface Interaction {
   id: string;
   resident_id: string;
-  summary: string;
-  details?: string;
+  details: string;
   date: string;
   column?: number;
   is_submitted?: boolean;
@@ -94,11 +93,11 @@ export default function InteractionCell({
               title={isExpanded ? 'Click to collapse' : 'Click to expand full text'}
             >
               {isExpanded 
-                ? getExpandedText(interaction.details || 'No details provided')
-                : getPreviewText(interaction.details || 'No details provided')
+                ? getExpandedText(interaction.details)
+                : getPreviewText(interaction.details)
               }
             </div>
-            {(interaction.details || 'No details provided').length > 10 && (
+            {interaction.details.length > 10 && (
               <span 
                 className={`text-xs opacity-60 mt-1 cursor-pointer ${
                   interaction.is_submitted 
@@ -138,7 +137,7 @@ export default function InteractionCell({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onCopyClick(interaction.details || 'No details provided');
+                onCopyClick(interaction.details);
               }}
               className={`w-6 h-6 flex items-center justify-center rounded text-xs bg-white/90 dark:bg-gray-800/90 shadow-sm backdrop-blur-sm border border-gray-200 dark:border-gray-600 ${
                 interaction.is_submitted 

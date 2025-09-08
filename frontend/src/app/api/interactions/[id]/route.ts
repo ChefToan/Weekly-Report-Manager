@@ -25,7 +25,6 @@ export async function PUT(
     const updateData: {
       details?: string;
       date?: string;
-      summary?: string;
       is_submitted?: boolean;
       week_starting?: string;
       resident_id?: string;
@@ -40,9 +39,6 @@ export async function PUT(
     }
     if (body.date !== undefined) {
       updateData.date = body.date;
-    }
-    if (body.summary !== undefined) {
-      updateData.summary = body.summary;
     }
     if (body.isSubmitted !== undefined) {
       updateData.is_submitted = body.isSubmitted;
@@ -118,7 +114,6 @@ export async function PATCH(
       updated_at: string;
       details?: string;
       date?: string;
-      summary?: string;
       is_submitted: boolean;
     } = {
       updated_at: new Date().toISOString(),
@@ -130,9 +125,6 @@ export async function PATCH(
     }
     if (body.date !== undefined) {
       updateData.date = body.date;
-    }
-    if (body.summary !== undefined) {
-      updateData.summary = body.summary;
     }
 
     const { data, error } = await supabase

@@ -1,19 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getCurrentUser } from '@/utils/auth';
+import { attachHeaders, cacheHeaders, makeETag, getCachedJSON, setCachedJSON, getVersion, bumpVersion } from '@/lib/cache';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser();
     if (!currentUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const v = await getVersion('residents', currentUser.id);
+    const etag = makeETag([currentUser.id, 'residents', v]);
+
+    const ifNoneMatch = request.headers.get('if-none-match');
+    if (ifNoneMatch && ifNoneMatch === etag) {
+      const notMod = new NextResponse(null, { status: 304 });
+      return attachHeaders(notMod, { ...cacheHeaders('residents'), ETag: etag });
+    }
+
+    // Try Redis cache
+    const cached = await getCachedJSON<any[]>('residents', [currentUser.id, v]);
+    if (cached) {
+      const res = NextResponse.json(cached);
+      return attachHeaders(res, { ...cacheHeaders('residents'), ETag: etag });
+    }
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
-    
+
     const { data: residents, error } = await supabase
       .from('residents')
       .select('*')
@@ -24,7 +41,10 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(residents);
+    await setCachedJSON('residents', [currentUser.id, v], residents);
+
+    const res = NextResponse.json(residents);
+    return attachHeaders(res, { ...cacheHeaders('residents'), ETag: etag });
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
@@ -60,6 +80,10 @@ export async function POST(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Invalidate caches
+    await bumpVersion('residents', currentUser.id);
+    await bumpVersion('stats', currentUser.id);
 
     return NextResponse.json(data);
   } catch {
@@ -111,7 +135,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ 
+    // Invalidate caches
+    await bumpVersion('residents', currentUser.id);
+    await bumpVersion('interactions', currentUser.id);
+    await bumpVersion('stats', currentUser.id);
+    await bumpVersion('reports-weekly', currentUser.id);
+
+    return NextResponse.json({
       message: `Successfully deleted ${data?.length || 0} residents`,
       deletedIds: (data || []).map(r => r.id)
     });

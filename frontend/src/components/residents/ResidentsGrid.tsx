@@ -29,8 +29,7 @@ interface Resident {
 interface Interaction {
   id: string;
   resident_id: string;
-  summary: string;
-  details?: string;
+  details: string;
   date: string;
   column?: number;
   is_submitted?: boolean;
@@ -96,7 +95,7 @@ const InteractionCell: React.FC<{
   }
 
   const isSubmitted = interaction.is_submitted || false;
-  const fullText = interaction.details || interaction.summary;
+  const fullText = interaction.details;
 
   // Create preview text (first 50 characters)
   const previewText = fullText.length > 25 ? fullText.substring(0, 25) + '...' : fullText;
@@ -178,7 +177,7 @@ const InteractionCell: React.FC<{
               )}
             </button>
             <button
-                onClick={() => onCopyClick(interaction.details || interaction.summary)}
+                onClick={() => onCopyClick(interaction.details)}
                 className="p-1 hover:bg-gray-200 dark:hover:bg-gray-500 rounded"
                 title="Copy interaction"
             >
@@ -605,7 +604,6 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         residentEmplId: resident.empl_id,
         weekStarting: weekStartingStr,
         date: interactionFormData.date,
-        summary: `${interactionFormData.details.slice(0, 100)}${interactionFormData.details.length > 100 ? '...' : ''}`,
         details: interactionFormData.details,
         column: showPopover.column
       };

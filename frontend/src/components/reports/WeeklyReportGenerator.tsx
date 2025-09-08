@@ -7,7 +7,6 @@ import { FileText, Copy, CheckCircle, Calendar, Send, List } from 'lucide-react'
 interface ReportInteraction {
   id?: string;
   residentId: string;
-  summary: string;
   details: string;
   date: string;
   residentName?: string;
@@ -131,16 +130,14 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         const transformedData: ReportInteraction[] = data.map((interaction: {
           id: string;
           resident_id: string;
-          summary: string;
-          details?: string;
+          details: string;
           date: string;
           resident_empl_id?: string;
           residents?: { name: string; empl_id: string };
         }) => ({
           id: interaction.id,
           residentId: interaction.resident_id,
-          summary: interaction.summary,
-          details: interaction.details || '',
+          details: interaction.details,
           date: interaction.date,
           residentName: interaction.residents?.name || 'Unknown',
           residentEmplId: interaction.resident_empl_id || interaction.residents?.empl_id
@@ -234,7 +231,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       const interaction = report.additionalInteractions[i];
       text += `Interaction ${i + 1}\n`;
       text += `Resident ID: ${interaction.residentId}\n`;
-      text += `Summary: ${interaction.summary}\n\n`;
+      text += `Details: ${interaction.details}\n\n`;
     }
 
     return text.trim();
@@ -276,13 +273,13 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         const asuIdFieldId = baseId + (index * 2); // Even numbers for ASU ID
         const detailsFieldId = baseId + (index * 2) + 1; // Odd numbers for details
 
-        script += `  // Interaction ${index + 1}: ${interaction.summary.slice(0, 50)}${interaction.summary.length > 50 ? '...' : ''}\n`;
+        script += `  // Interaction ${index + 1}: ${interaction.details.slice(0, 50)}${interaction.details.length > 50 ? '...' : ''}\n`;
         
         // ASU ID field
         script += `  document.getElementById("t_${asuIdFieldId}").value = "${interaction.residentId}";\n`;
         
         // Details field
-        const interactionDetails = interaction.details || interaction.summary;
+        const interactionDetails = interaction.details;
         const escapedDetails = interactionDetails.replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '');
         script += `  document.getElementById("t_${detailsFieldId}").value = "${escapedDetails}";\n`;
         script += `  \n`;
@@ -325,11 +322,11 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       script += `  // Interaction ${index + 1}: ${interaction.residentName || 'Unknown'}\n`;
       script += `  try {\n`;
       script += `    const resident${fieldCounter} = document.getElementById('${fieldId}');\n`;
-      script += `    const summary${fieldCounter} = document.getElementById('${fieldId + 1}');\n`;
+      script += `    const details${fieldCounter} = document.getElementById('${fieldId + 1}');\n`;
       script += `    const details${fieldCounter} = document.getElementById('${fieldId + 2}');\n`;
       script += `    \n`;
       script += `    if (resident${fieldCounter}) resident${fieldCounter}.value = "${interaction.residentEmplId || interaction.residentId}";\n`;
-      script += `    if (summary${fieldCounter}) summary${fieldCounter}.value = "${interaction.summary.replace(/"/g, '\\"')}";\n`;
+      script += `    if (details${fieldCounter}) details${fieldCounter}.value = "${interaction.details.replace(/"/g, '\\"')}";\n`;
       script += `    if (details${fieldCounter}) details${fieldCounter}.value = "${(interaction.details || '').replace(/"/g, '\\"')}";\n`;
       script += `    console.log("Filled interaction ${index + 1}");\n`;
       script += `  } catch(e) {\n`;
@@ -654,7 +651,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
                             </span>
                           </div>
                           <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                            {interaction.summary}
+                            {interaction.details}
                           </p>
                         </div>
                       </label>

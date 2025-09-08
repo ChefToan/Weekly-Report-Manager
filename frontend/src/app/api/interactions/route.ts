@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getCurrentUser } from '@/utils/auth';
+import { attachHeaders, cacheHeaders, makeETag, getCachedJSON, setCachedJSON, getVersion, bumpVersion } from '@/lib/cache';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,15 +11,32 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const weekStarting = searchParams.get('weekStarting');
+    const residentId = searchParams.get('residentId');
+    const submitted = searchParams.get('submitted');
+
+    const v = await getVersion('interactions', currentUser.id);
+    const etag = makeETag([currentUser.id, 'interactions', v, weekStarting || '', residentId || '', submitted || '']);
+
+    const ifNoneMatch = request.headers.get('if-none-match');
+    if (ifNoneMatch && ifNoneMatch === etag) {
+      const notMod = new NextResponse(null, { status: 304 });
+      return attachHeaders(notMod, { ...cacheHeaders('interactions'), ETag: etag });
+    }
+
+    const cacheKeyParts = [currentUser.id, v, weekStarting || '', residentId || '', submitted || ''];
+    const cached = await getCachedJSON<any[]>('interactions', cacheKeyParts);
+    if (cached) {
+      const res = NextResponse.json(cached);
+      return attachHeaders(res, { ...cacheHeaders('interactions'), ETag: etag });
+    }
+
     // Use service role key for server-side operations to bypass RLS
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
-    const { searchParams } = new URL(request.url);
-    const weekStarting = searchParams.get('weekStarting');
-    const residentId = searchParams.get('residentId');
-    const submitted = searchParams.get('submitted');
 
     let query = supabase
       .from('interactions')
@@ -52,7 +70,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(interactions);
+    await setCachedJSON('interactions', cacheKeyParts, interactions);
+
+    const res = NextResponse.json(interactions);
+    return attachHeaders(res, { ...cacheHeaders('interactions'), ETag: etag });
   } catch (error) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
@@ -81,7 +102,6 @@ export async function POST(request: NextRequest) {
         resident_empl_id: body.residentEmplId,
         week_starting: body.weekStarting,
         date: body.date,
-        summary: body.summary,
         details: body.details,
         column: body.column || null, // Store the column number
         is_submitted: false,
@@ -99,6 +119,11 @@ export async function POST(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Invalidate caches
+    await bumpVersion('interactions', currentUser.id);
+    await bumpVersion('stats', currentUser.id);
+    await bumpVersion('reports-weekly', currentUser.id);
 
     return NextResponse.json(data);
   } catch (error) {

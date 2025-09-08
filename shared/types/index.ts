@@ -14,8 +14,7 @@ export interface Interaction {
   residentId: string;
   residentEmplId: string;
   date: Date;
-  summary: string;
-  details?: string;
+  details: string;
   isSubmitted: boolean;
   weekStarting: Date;
   createdAt: Date;

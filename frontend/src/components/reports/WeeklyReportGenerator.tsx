@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react';
 import { format, startOfWeek, addDays } from 'date-fns';
 import { FileText, Copy, CheckCircle, Calendar, Send, List } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ReportInteraction {
   id?: string;
   residentId: string;
   details: string;
   date: string;
+  created_at?: string;
   residentName?: string;
   residentEmplId?: string;
 }
@@ -24,6 +26,8 @@ interface WeeklyReportGeneratorProps {
 }
 
 export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyReportGeneratorProps) {
+  const { user } = useAuth();
+
   // Helper function to get current date in user's local timezone
   const getCurrentLocalDate = () => {
     return new Date(); // This automatically uses user's local timezone
@@ -40,11 +44,21 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     return new Date(dateString + 'T12:00:00');
   };
 
+  const [selectedDate, setSelectedDate] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('weeklyReport_selectedDate');
+      if (saved) {
+        return saved;
+      }
+    }
+    const now = getCurrentLocalDate();
+    return format(now, 'yyyy-MM-dd');
+  });
+
   const [selectedWeek, setSelectedWeek] = useState(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('weeklyReport_selectedWeek');
+      const saved = localStorage.getItem('weeklyReport_selectedDate');
       if (saved) {
-        // Validate that saved date represents a Monday (week start)
         const savedDate = parseDateSafely(saved);
         const weekStart = getWeekStartForDate(savedDate);
         return format(weekStart, 'yyyy-MM-dd');
@@ -75,15 +89,14 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
   const [allUnsubmittedInteractions, setAllUnsubmittedInteractions] = useState<ReportInteraction[]>([]);
   const [selectedInteractions, setSelectedInteractions] = useState<Set<string>>(new Set());
   const [currentStep, setCurrentStep] = useState<'choose-method' | 'by-week' | 'custom-select'>('choose-method');
-  
-  const baseFieldId = '808166082'; // Developer-configured base field ID
 
   // Save state changes to localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      localStorage.setItem('weeklyReport_selectedDate', selectedDate);
       localStorage.setItem('weeklyReport_selectedWeek', selectedWeek);
     }
-  }, [selectedWeek]);
+  }, [selectedDate, selectedWeek]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -132,6 +145,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
           resident_id: string;
           details: string;
           date: string;
+          created_at?: string;
           resident_empl_id?: string;
           residents?: { name: string; empl_id: string };
         }) => ({
@@ -139,9 +153,20 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
           residentId: interaction.resident_id,
           details: interaction.details,
           date: interaction.date,
+          created_at: interaction.created_at,
           residentName: interaction.residents?.name || 'Unknown',
           residentEmplId: interaction.resident_empl_id || interaction.residents?.empl_id
         }));
+        
+        // Sort by created_at (most recent first) - API should already handle this but double-check
+        transformedData.sort((a, b) => {
+          if (a.created_at && b.created_at) {
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          }
+          // Fallback to date if created_at is not available
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        });
+        
         setAllUnsubmittedInteractions(transformedData);
       }
     } catch {
@@ -252,45 +277,271 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     // Combine required and additional interactions for the autofill script (only unsubmitted)
     const allInteractions = [
       ...unsubmittedRequired.slice(0, 3), // Take first 3 required (only unsubmitted)
-      ...unsubmittedAdditional.slice(0, 14) // Take up to 14 additional (only unsubmitted)
+      ...unsubmittedAdditional.slice(0, 20) // Take up to 20 additional (only unsubmitted)
     ];
 
-    let script = '// Weekly Report Autofill Script\n';
-    script += '// Instructions: \n';
-    script += '// 1. Open your weekly report form in the browser\n';
-    script += '// 2. Open Developer Tools (F12 or Cmd+Option+I)\n';
-    script += '// 3. Go to Console tab\n';
-    script += '// 4. Paste this script and press Enter\n\n';
-    script += '(function() {\n';
-    script += '  console.log("Starting Weekly Report Autofill...");\n';
-    script += '  console.log("Processing " + ' + allInteractions.length + ' + " interactions");\n\n';
+    const interactions = allInteractions.map(interaction => ({
+      id: interaction.residentEmplId || interaction.residentId,
+      summary: interaction.details
+    }));
 
-    // Starting ID for the form fields - configurable base ID
-    const baseId = parseInt(baseFieldId);
+    const userAsuId = user?.asu_id || '1234567890'; // Fallback if user not available
 
-    allInteractions.forEach((interaction, index) => {
-      if (interaction) {
-        const asuIdFieldId = baseId + (index * 2); // Even numbers for ASU ID
-        const detailsFieldId = baseId + (index * 2) + 1; // Odd numbers for details
+    // Add warning comment if less than 3 interactions available
+    const warningComment = interactions.length < 3 
+      ? `// ⚠️ WARNING: Only ${interactions.length} interaction${interactions.length === 1 ? '' : 's'} available for this week. Weekly reports typically require at least 3 interactions.\n// Consider adding more interactions or selecting a different week.\n\n`
+      : '';
 
-        script += `  // Interaction ${index + 1}: ${interaction.details.slice(0, 50)}${interaction.details.length > 50 ? '...' : ''}\n`;
+    return `${warningComment}(function() {
+    console.log('🚀 Starting ASU Survey Autofill...');
+    
+    // Generated interaction data  
+    const interactions = ${JSON.stringify(interactions, null, 8)};
+
+    let isProcessing = false;
+    
+    // Function to trigger proper form events
+    function fillField(element, value) {
+        if (element) {
+            element.value = value;
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.classList.add('used');
+            return true;
+        }
+        return false;
+    }
+    
+    // Function to fill Page 1
+    function fillPage1() {
+        if (isProcessing) return;
+        isProcessing = true;
         
-        // ASU ID field
-        script += `  document.getElementById("t_${asuIdFieldId}").value = "${interaction.residentId}";\n`;
+        console.log('📝 Filling Page 1...');
+        const asuIdField = document.querySelector('input[name="t_808166078"]');
+        if (fillField(asuIdField, '${userAsuId}')) {
+            console.log('✅ Filled ASU ID');
+            
+            setTimeout(() => {
+                const startBtn = document.querySelector('#SurveySubmitButtonElement');
+                if (startBtn) {
+                    console.log('🎯 Clicking Start button...');
+                    startBtn.click();
+                    monitorForPage2();
+                }
+            }, 1000);
+        } else {
+            console.log('❌ ASU ID field not found');
+            isProcessing = false;
+        }
+    }
+    
+    // Function to monitor for Page 2
+    function monitorForPage2() {
+        let attempts = 0;
+        const maxAttempts = 15;
         
-        // Details field
-        const interactionDetails = interaction.details;
-        const escapedDetails = interactionDetails.replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '');
-        script += `  document.getElementById("t_${detailsFieldId}").value = "${escapedDetails}";\n`;
-        script += `  \n`;
-      }
-    });
-
-    script += '  console.log("Autofill process completed!");\n';
-    script += '  console.log("Please review all filled fields before submitting your report");\n';
-    script += '})();\n';
-
-    return script;
+        const checkForPage2 = () => {
+            attempts++;
+            console.log(\`🔍 Checking for Page 2... (attempt \${attempts})\`);
+            
+            if (document.querySelector('input[name="t_808166082"]')) {
+                console.log('📍 Page 2 detected! Starting autofill...');
+                isProcessing = false;
+                setTimeout(() => fillPage2(), 1500);
+                return;
+            }
+            
+            if (attempts < maxAttempts) {
+                setTimeout(checkForPage2, 1000);
+            } else {
+                console.log('❌ Page 2 not detected after maximum attempts');
+                isProcessing = false;
+            }
+        };
+        
+        setTimeout(checkForPage2, 2000);
+    }
+    
+    // Function to fill Page 2
+    function fillPage2() {
+        if (isProcessing) return;
+        isProcessing = true;
+        
+        console.log('📝 Filling Page 2 interactions...');
+        
+        // Fill required interactions (first 3)
+        const requiredFields = [
+            { idField: 't_808166082', summaryField: 't_808166083' },
+            { idField: 't_808166084', summaryField: 't_808166085' },
+            { idField: 't_808166086', summaryField: 't_808166087' }
+        ];
+        
+        console.log('📝 Filling required interactions...');
+        for (let i = 0; i < 3 && i < interactions.length; i++) {
+            const idField = document.querySelector(\`input[name="\${requiredFields[i].idField}"]\`);
+            const summaryField = document.querySelector(\`input[name="\${requiredFields[i].summaryField}"]\`);
+            
+            if (fillField(idField, interactions[i].id) && fillField(summaryField, interactions[i].summary)) {
+                console.log(\`✅ Filled required interaction \${i + 1}\`);
+            }
+        }
+        
+        // Fill additional interactions (up to 20)
+        const additionalFields = [
+            { idField: 't_808166088', summaryField: 't_808166089' },
+            { idField: 't_808166090', summaryField: 't_808166091' },
+            { idField: 't_808166092', summaryField: 't_808166093' },
+            { idField: 't_808166094', summaryField: 't_808166095' },
+            { idField: 't_808166096', summaryField: 't_808166097' },
+            { idField: 't_808166098', summaryField: 't_808166099' },
+            { idField: 't_808166100', summaryField: 't_808166101' },
+            { idField: 't_808166102', summaryField: 't_808166103' },
+            { idField: 't_808166104', summaryField: 't_808166105' },
+            { idField: 't_808166106', summaryField: 't_808166107' },
+            { idField: 't_808166108', summaryField: 't_808166109' },
+            { idField: 't_808166110', summaryField: 't_808166111' },
+            { idField: 't_808166112', summaryField: 't_808166113' },
+            { idField: 't_808166114', summaryField: 't_808166115' },
+            { idField: 't_808166116', summaryField: 't_808166117' },
+            { idField: 't_808166118', summaryField: 't_808166119' },
+            { idField: 't_808166120', summaryField: 't_808166121' },
+            { idField: 't_808166122', summaryField: 't_808166123' },
+            { idField: 't_808166124', summaryField: 't_808166125' },
+            { idField: 't_808166126', summaryField: 't_808166127' }
+        ];
+        
+        console.log('📝 Filling additional interactions...');
+        const remainingInteractions = interactions.slice(3);
+        const maxAdditional = Math.min(remainingInteractions.length, 20);
+        
+        for (let i = 0; i < maxAdditional; i++) {
+            const idField = document.querySelector(\`input[name="\${additionalFields[i].idField}"]\`);
+            const summaryField = document.querySelector(\`input[name="\${additionalFields[i].summaryField}"]\`);
+            
+            if (fillField(idField, remainingInteractions[i].id) && fillField(summaryField, remainingInteractions[i].summary)) {
+                console.log(\`✅ Filled additional interaction \${i + 1}\`);
+            }
+        }
+        
+        // Handle "Would you like to add more" question and submit
+        setTimeout(() => {
+            handleRadioAndSubmit();
+        }, 2000);
+    }
+    
+    // Function to handle radio selection and submit
+    function handleRadioAndSubmit() {
+        try {
+            console.log('📝 Handling radio selection...');
+            
+            // Calculate if we need more interactions
+            const totalFilled = Math.min(interactions.length, 23); // 3 required + 20 additional max on page 2
+            const needsMore = interactions.length > 23;
+            
+            console.log(\`📊 Total interactions: \${interactions.length}\`);
+            console.log(\`📊 Filled on page 2: \${totalFilled}\`);
+            console.log(\`📊 Remaining: \${Math.max(0, interactions.length - 23)}\`);
+            console.log(\`📊 Needs more pages: \${needsMore}\`);
+            
+            // Use getElementById for IDs that start with numbers
+            const radioYes = document.getElementById('808166128ID');
+            const radioNo = document.getElementById('808166129ID');
+            
+            if (needsMore && radioYes) {
+                radioYes.checked = true;
+                radioYes.dispatchEvent(new Event('change', { bubbles: true }));
+                console.log('✅ Selected "Yes" for more interactions');
+            } else if (!needsMore && radioNo) {
+                radioNo.checked = true;
+                radioNo.dispatchEvent(new Event('change', { bubbles: true }));
+                console.log('✅ Selected "No" - all interactions fit on page 2');
+            }
+            
+            // Click Next button
+            setTimeout(() => {
+                const nextBtn = document.querySelector('#SurveySubmitButtonElement');
+                if (nextBtn) {
+                    console.log('🎯 Clicking Next button...');
+                    nextBtn.click();
+                    
+                    // Monitor for popup
+                    setTimeout(() => {
+                        monitorForPopup();
+                    }, 2000);
+                }
+            }, 1000);
+            
+        } catch (error) {
+            console.error('❌ Error handling radio and submit:', error);
+            isProcessing = false;
+        }
+    }
+    
+    // Function to monitor for popup
+    function monitorForPopup() {
+        console.log('🔍 Monitoring for popup or next page...');
+        
+        const popup = document.querySelector('#requestResponseDialog');
+        if (popup && popup.style.display !== 'none') {
+            console.log('⚠️ Popup detected - waiting for user decision');
+            console.log('ℹ️ User can click "Continue Without Answering" to proceed');
+            isProcessing = false;
+            return;
+        }
+        
+        // Check if we successfully moved to next page
+        setTimeout(() => {
+            const currentPage = detectCurrentPage();
+            if (currentPage === 'page3' || currentPage === 'unknown') {
+                console.log('✅ Successfully completed autofill process!');
+                console.log(\`📊 Total interactions processed: \${interactions.length}\`);
+                isProcessing = false;
+            } else if (currentPage === 'page2.1') {
+                console.log('📍 Moved to Page 2.1 for additional interactions');
+                // Could add logic here to fill Page 2.1 if needed
+                isProcessing = false;
+            }
+        }, 1000);
+    }
+    
+    // Function to detect current page
+    function detectCurrentPage() {
+        if (document.querySelector('input[name="t_808166078"]')) {
+            return 'page1';
+        } else if (document.querySelector('input[name="t_808166082"]')) {
+            return 'page2';
+        } else if (document.querySelector('input[name="t_808166130"]')) { // Assuming continuation
+            return 'page2.1';
+        } else {
+            return 'unknown';
+        }
+    }
+    
+    // Start the autofill process
+    function startAutofill() {
+        const currentPage = detectCurrentPage();
+        console.log('🔍 Detecting current page...');
+        
+        switch(currentPage) {
+            case 'page1':
+                console.log('📍 Detected Page 1');
+                fillPage1();
+                break;
+            case 'page2':
+                console.log('📍 Detected Page 2');
+                fillPage2();
+                break;
+            default:
+                console.log('📍 Page not recognized or already completed');
+                break;
+        }
+    }
+    
+    // Initialize
+    startAutofill();
+    console.log(\`✅ Autofill script initialized! Total interactions: \${interactions.length}\`);
+})();`;
   };
 
   const generateAutofillScriptFromSelection = () => {
@@ -303,44 +554,268 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
     if (selectedInteractionsList.length === 0) return '';
 
-    let script = '// Weekly Report Autofill Script (Custom Selection)\n';
-    script += '// Instructions: \n';
-    script += '// 1. Open your weekly report form in the browser\n';
-    script += '// 2. Open Developer Tools (F12 or Cmd+Option+I)\n';
-    script += '// 3. Go to Console tab\n';
-    script += '// 4. Paste this script and press Enter\n\n';
-    script += '(function() {\n';
-    script += '  console.log("Starting Weekly Report Autofill (Custom Selection)...");\n';
-    script += '  console.log("Processing " + ' + selectedInteractionsList.length + ' + " selected interactions");\n\n';
+    // Add warning comment if less than 3 interactions selected
+    const warningComment = selectedInteractionsList.length < 3 
+      ? `// ⚠️ WARNING: Only ${selectedInteractionsList.length} interaction${selectedInteractionsList.length === 1 ? '' : 's'} selected. Weekly reports typically require at least 3 interactions.\n// Consider adding ${3 - selectedInteractionsList.length} more interaction${3 - selectedInteractionsList.length === 1 ? '' : 's'} for a complete report.\n\n`
+      : '';
 
-    let fieldCounter = 1;
-    const baseId = parseInt(baseFieldId);
+    const interactions = selectedInteractionsList.map(interaction => ({
+      id: interaction.residentEmplId || interaction.residentId,
+      summary: interaction.details
+    }));
 
-    selectedInteractionsList.slice(0, 17).forEach((interaction, index) => {
-      const fieldId = baseId + (index * 3);
-      
-      script += `  // Interaction ${index + 1}: ${interaction.residentName || 'Unknown'}\n`;
-      script += `  try {\n`;
-      script += `    const resident${fieldCounter} = document.getElementById('${fieldId}');\n`;
-      script += `    const details${fieldCounter} = document.getElementById('${fieldId + 1}');\n`;
-      script += `    const details${fieldCounter} = document.getElementById('${fieldId + 2}');\n`;
-      script += `    \n`;
-      script += `    if (resident${fieldCounter}) resident${fieldCounter}.value = "${interaction.residentEmplId || interaction.residentId}";\n`;
-      script += `    if (details${fieldCounter}) details${fieldCounter}.value = "${interaction.details.replace(/"/g, '\\"')}";\n`;
-      script += `    if (details${fieldCounter}) details${fieldCounter}.value = "${(interaction.details || '').replace(/"/g, '\\"')}";\n`;
-      script += `    console.log("Filled interaction ${index + 1}");\n`;
-      script += `  } catch(e) {\n`;
-      script += `    console.warn("Could not fill interaction ${index + 1}:", e.message);\n`;
-      script += `  }\n\n`;
-      
-      fieldCounter++;
-    });
+    const userAsuId = user?.asu_id || '1234567890'; // Fallback if user not available
 
-    script += '  console.log("Autofill completed!");\n';
-    script += '  console.log("Please review all fields before submitting.");\n';
-    script += '})();\n';
+    return `${warningComment}(function() {
+    console.log('🚀 Starting ASU Survey Autofill (Custom Selection)...');
+    
+    // Generated interaction data from custom selection
+    const interactions = ${JSON.stringify(interactions, null, 8)};
 
-    return script;
+    let isProcessing = false;
+    
+    // Function to trigger proper form events
+    function fillField(element, value) {
+        if (element) {
+            element.value = value;
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.classList.add('used');
+            return true;
+        }
+        return false;
+    }
+    
+    // Function to fill Page 1
+    function fillPage1() {
+        if (isProcessing) return;
+        isProcessing = true;
+        
+        console.log('📝 Filling Page 1...');
+        const asuIdField = document.querySelector('input[name="t_808166078"]');
+        if (fillField(asuIdField, '${userAsuId}')) {
+            console.log('✅ Filled ASU ID');
+            
+            setTimeout(() => {
+                const startBtn = document.querySelector('#SurveySubmitButtonElement');
+                if (startBtn) {
+                    console.log('🎯 Clicking Start button...');
+                    startBtn.click();
+                    monitorForPage2();
+                }
+            }, 1000);
+        } else {
+            console.log('❌ ASU ID field not found');
+            isProcessing = false;
+        }
+    }
+    
+    // Function to monitor for Page 2
+    function monitorForPage2() {
+        let attempts = 0;
+        const maxAttempts = 15;
+        
+        const checkForPage2 = () => {
+            attempts++;
+            console.log(\`🔍 Checking for Page 2... (attempt \${attempts})\`);
+            
+            if (document.querySelector('input[name="t_808166082"]')) {
+                console.log('📍 Page 2 detected! Starting autofill...');
+                isProcessing = false;
+                setTimeout(() => fillPage2(), 1500);
+                return;
+            }
+            
+            if (attempts < maxAttempts) {
+                setTimeout(checkForPage2, 1000);
+            } else {
+                console.log('❌ Page 2 not detected after maximum attempts');
+                isProcessing = false;
+            }
+        };
+        
+        setTimeout(checkForPage2, 2000);
+    }
+    
+    // Function to fill Page 2
+    function fillPage2() {
+        if (isProcessing) return;
+        isProcessing = true;
+        
+        console.log('📝 Filling Page 2 interactions...');
+        
+        // Fill required interactions (first 3)
+        const requiredFields = [
+            { idField: 't_808166082', summaryField: 't_808166083' },
+            { idField: 't_808166084', summaryField: 't_808166085' },
+            { idField: 't_808166086', summaryField: 't_808166087' }
+        ];
+        
+        console.log('📝 Filling required interactions...');
+        for (let i = 0; i < 3 && i < interactions.length; i++) {
+            const idField = document.querySelector(\`input[name="\${requiredFields[i].idField}"]\`);
+            const summaryField = document.querySelector(\`input[name="\${requiredFields[i].summaryField}"]\`);
+            
+            if (fillField(idField, interactions[i].id) && fillField(summaryField, interactions[i].summary)) {
+                console.log(\`✅ Filled required interaction \${i + 1}\`);
+            }
+        }
+        
+        // Fill additional interactions (up to 20)
+        const additionalFields = [
+            { idField: 't_808166088', summaryField: 't_808166089' },
+            { idField: 't_808166090', summaryField: 't_808166091' },
+            { idField: 't_808166092', summaryField: 't_808166093' },
+            { idField: 't_808166094', summaryField: 't_808166095' },
+            { idField: 't_808166096', summaryField: 't_808166097' },
+            { idField: 't_808166098', summaryField: 't_808166099' },
+            { idField: 't_808166100', summaryField: 't_808166101' },
+            { idField: 't_808166102', summaryField: 't_808166103' },
+            { idField: 't_808166104', summaryField: 't_808166105' },
+            { idField: 't_808166106', summaryField: 't_808166107' },
+            { idField: 't_808166108', summaryField: 't_808166109' },
+            { idField: 't_808166110', summaryField: 't_808166111' },
+            { idField: 't_808166112', summaryField: 't_808166113' },
+            { idField: 't_808166114', summaryField: 't_808166115' },
+            { idField: 't_808166116', summaryField: 't_808166117' },
+            { idField: 't_808166118', summaryField: 't_808166119' },
+            { idField: 't_808166120', summaryField: 't_808166121' },
+            { idField: 't_808166122', summaryField: 't_808166123' },
+            { idField: 't_808166124', summaryField: 't_808166125' },
+            { idField: 't_808166126', summaryField: 't_808166127' }
+        ];
+        
+        console.log('📝 Filling additional interactions...');
+        const remainingInteractions = interactions.slice(3);
+        const maxAdditional = Math.min(remainingInteractions.length, 20);
+        
+        for (let i = 0; i < maxAdditional; i++) {
+            const idField = document.querySelector(\`input[name="\${additionalFields[i].idField}"]\`);
+            const summaryField = document.querySelector(\`input[name="\${additionalFields[i].summaryField}"]\`);
+            
+            if (fillField(idField, remainingInteractions[i].id) && fillField(summaryField, remainingInteractions[i].summary)) {
+                console.log(\`✅ Filled additional interaction \${i + 1}\`);
+            }
+        }
+        
+        // Handle "Would you like to add more" question and submit
+        setTimeout(() => {
+            handleRadioAndSubmit();
+        }, 2000);
+    }
+    
+    // Function to handle radio selection and submit
+    function handleRadioAndSubmit() {
+        try {
+            console.log('📝 Handling radio selection...');
+            
+            // Calculate if we need more interactions
+            const totalFilled = Math.min(interactions.length, 23); // 3 required + 20 additional max on page 2
+            const needsMore = interactions.length > 23;
+            
+            console.log(\`📊 Total interactions: \${interactions.length}\`);
+            console.log(\`📊 Filled on page 2: \${totalFilled}\`);
+            console.log(\`📊 Remaining: \${Math.max(0, interactions.length - 23)}\`);
+            console.log(\`📊 Needs more pages: \${needsMore}\`);
+            
+            // Use getElementById for IDs that start with numbers
+            const radioYes = document.getElementById('808166128ID');
+            const radioNo = document.getElementById('808166129ID');
+            
+            if (needsMore && radioYes) {
+                radioYes.checked = true;
+                radioYes.dispatchEvent(new Event('change', { bubbles: true }));
+                console.log('✅ Selected "Yes" for more interactions');
+            } else if (!needsMore && radioNo) {
+                radioNo.checked = true;
+                radioNo.dispatchEvent(new Event('change', { bubbles: true }));
+                console.log('✅ Selected "No" - all interactions fit on page 2');
+            }
+            
+            // Click Next button
+            setTimeout(() => {
+                const nextBtn = document.querySelector('#SurveySubmitButtonElement');
+                if (nextBtn) {
+                    console.log('🎯 Clicking Next button...');
+                    nextBtn.click();
+                    
+                    // Monitor for popup
+                    setTimeout(() => {
+                        monitorForPopup();
+                    }, 2000);
+                }
+            }, 1000);
+            
+        } catch (error) {
+            console.error('❌ Error handling radio and submit:', error);
+            isProcessing = false;
+        }
+    }
+    
+    // Function to monitor for popup
+    function monitorForPopup() {
+        console.log('🔍 Monitoring for popup or next page...');
+        
+        const popup = document.querySelector('#requestResponseDialog');
+        if (popup && popup.style.display !== 'none') {
+            console.log('⚠️ Popup detected - waiting for user decision');
+            console.log('ℹ️ User can click "Continue Without Answering" to proceed');
+            isProcessing = false;
+            return;
+        }
+        
+        // Check if we successfully moved to next page
+        setTimeout(() => {
+            const currentPage = detectCurrentPage();
+            if (currentPage === 'page3' || currentPage === 'unknown') {
+                console.log('✅ Successfully completed autofill process!');
+                console.log(\`📊 Total interactions processed: \${interactions.length}\`);
+                isProcessing = false;
+            } else if (currentPage === 'page2.1') {
+                console.log('📍 Moved to Page 2.1 for additional interactions');
+                // Could add logic here to fill Page 2.1 if needed
+                isProcessing = false;
+            }
+        }, 1000);
+    }
+    
+    // Function to detect current page
+    function detectCurrentPage() {
+        if (document.querySelector('input[name="t_808166078"]')) {
+            return 'page1';
+        } else if (document.querySelector('input[name="t_808166082"]')) {
+            return 'page2';
+        } else if (document.querySelector('input[name="t_808166130"]')) { // Assuming continuation
+            return 'page2.1';
+        } else {
+            return 'unknown';
+        }
+    }
+    
+    // Start the autofill process
+    function startAutofill() {
+        const currentPage = detectCurrentPage();
+        console.log('🔍 Detecting current page...');
+        
+        switch(currentPage) {
+            case 'page1':
+                console.log('📍 Detected Page 1');
+                fillPage1();
+                break;
+            case 'page2':
+                console.log('📍 Detected Page 2');
+                fillPage2();
+                break;
+            default:
+                console.log('📍 Page not recognized or already completed');
+                break;
+        }
+    }
+    
+    // Initialize
+    startAutofill();
+    console.log(\`✅ Autofill script initialized! Total interactions: \${interactions.length}\`);
+})();`;
   };
 
   const copyToClipboard = async (text: string, type: 'additional' | 'autofill' | 'autofill-selection') => {
@@ -495,11 +970,13 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
                 </label>
                 <input
                   type="date"
-                  value={selectedWeek}
+                  value={selectedDate}
                   onChange={(e) => {
-                    const selectedDate = parseDateSafely(e.target.value);
-                    const weekStart = getWeekStartForDate(selectedDate);
+                    const newSelectedDate = e.target.value;
+                    const selectedDateObj = parseDateSafely(newSelectedDate);
+                    const weekStart = getWeekStartForDate(selectedDateObj);
                     const weekStartString = format(weekStart, 'yyyy-MM-dd');
+                    setSelectedDate(newSelectedDate);
                     setSelectedWeek(weekStartString);
                   }}
                   className="w-full p-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -528,60 +1005,114 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
               </button>
             </div>
 
-            {/* Autofill Script Section */}
-            {report && (report.requiredInteractions.length > 0 || report.additionalInteractions.length > 0) && (
-              <div className="border-t border-gray-200 dark:border-gray-600 pt-6">
-                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-medium text-gray-900 dark:text-gray-100">Autofill Script</h3>
+            {/* Report Results and Actions */}
+            {report && (() => {
+              // Filter out submitted interactions for accurate count
+              const unsubmittedRequired = report.requiredInteractions.filter(interaction => 
+                allUnsubmittedInteractions.some(unsubmitted => unsubmitted.id === interaction.id)
+              );
+              const unsubmittedAdditional = report.additionalInteractions.filter(interaction => 
+                allUnsubmittedInteractions.some(unsubmitted => unsubmitted.id === interaction.id)
+              );
+              const totalUnsubmitted = unsubmittedRequired.length + unsubmittedAdditional.length;
+              
+              return (
+                <div className="space-y-6">
+                  {/* Warning for insufficient interactions - always visible if < 3 unsubmitted */}
+                  {totalUnsubmitted < 3 && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-600 rounded-lg p-5 shadow-lg">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-amber-600 dark:text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-base font-semibold text-amber-800 dark:text-amber-200">
+                          Minimum Interactions Required
+                        </h3>
+                        <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                          Weekly reports require at least 3 interactions. 
+                          {totalUnsubmitted === 0 
+                            ? ' No unsubmitted interactions found for this week. Please add interactions for this week to generate a complete report.'
+                            : ` You have ${totalUnsubmitted} unsubmitted interaction${totalUnsubmitted === 1 ? '' : 's'}. Please add ${3 - totalUnsubmitted} more interaction${3 - totalUnsubmitted === 1 ? '' : 's'} for this week to generate a complete report.`
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Autofill Script Section - only show if there are unsubmitted interactions */}
+                {totalUnsubmitted > 0 && (
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-gray-900 dark:text-gray-100">Autofill Script</h3>
+                        {totalUnsubmitted < 3 && (
+                          <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 px-2 py-1 rounded-full">
+                            Incomplete ({totalUnsubmitted}/3)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded p-3 font-mono text-xs text-gray-900 dark:text-gray-100 max-h-40 overflow-y-auto mb-3">
+                      {generateAutofillScript()}
+                    </div>
+
+                    <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-4">
+                      Paste this script in your browser console (F12) on the report form page
+                    </p>
+
+                    {/* Copy Script Button */}
                     <button
                       onClick={() => copyToClipboard(generateAutofillScript(), 'autofill')}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm flex items-center gap-2"
+                      disabled={totalUnsubmitted < 3}
+                      className={`w-full px-4 py-3 rounded-lg text-sm flex items-center justify-center gap-2 font-medium mb-4 ${
+                        totalUnsubmitted < 3
+                          ? 'bg-gray-400 dark:bg-gray-600 text-gray-700 dark:text-gray-300 cursor-not-allowed opacity-50' 
+                          : 'bg-blue-600 hover:bg-blue-700 text-white'
+                      }`}
                     >
                       {copied === 'autofill' ? (
                         <CheckCircle className="h-4 w-4" />
                       ) : (
                         <Copy className="h-4 w-4" />
                       )}
-                      {copied === 'autofill' ? 'Copied!' : 'Copy Script'}
+                      {copied === 'autofill' ? 'Copied!' : (
+                        totalUnsubmitted < 3 
+                          ? `Copy Script (Need ${3 - totalUnsubmitted} more interactions)`
+                          : 'Copy Script'
+                      )}
+                    </button>
+
+                    {/* Mark as Submitted Button */}
+                    <button
+                      onClick={markAsSubmitted}
+                      disabled={submitting || totalUnsubmitted < 3}
+                      className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium"
+                    >
+                      {submitting ? (
+                        <>
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                          Marking as Submitted...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-5 w-5" />
+                          Mark as Submitted
+                        </>
+                      )}
                     </button>
                   </div>
-
-                  <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded p-3 font-mono text-xs text-gray-900 dark:text-gray-100 max-h-40 overflow-y-auto">
-                    {generateAutofillScript()}
-                  </div>
-
-                  <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 text-center">
-                    Paste this script in your browser console (F12) on the report form page
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Action Button */}
-            {report && (report.requiredInteractions.length > 0 || report.additionalInteractions.length > 0) && (
-              <button
-                onClick={markAsSubmitted}
-                disabled={submitting}
-                className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium"
-              >
-                {submitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
-                    Marking as Submitted...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-5 w-5" />
-                    Mark as Submitted
-                  </>
                 )}
-              </button>
-            )}
+              </div>
+              )})()}
 
-            {/* No Results Message */}
-            {report && !(report.requiredInteractions.length > 0 || report.additionalInteractions.length > 0) && (
-              <div className="text-center py-8 border-t border-gray-200 dark:border-gray-600">
+            {/* No Results Message - only show if no interactions AND we haven't already shown the warning above */}
+            {report && (report.requiredInteractions.length + report.additionalInteractions.length) === 0 && (
+              <div className="text-center py-8">
                 <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
                 <div className="text-gray-500 dark:text-gray-400 font-medium mb-2">
                   No interactions found
@@ -622,7 +1153,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
                 </label>
               </div>
 
-              <div className="max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg">
+              <div className="max-h-96 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg">
                 {allUnsubmittedInteractions.length === 0 ? (
                   <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                     <List className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -669,54 +1200,91 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
               )}
             </div>
 
-            {/* Autofill Script Section */}
-            {selectedInteractions.size > 0 && (
-              <div className="border-t border-gray-200 dark:border-gray-600 pt-6">
-                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-medium text-gray-900 dark:text-gray-100">Autofill Script</h3>
-                    <button
-                      onClick={() => copyToClipboard(generateAutofillScriptFromSelection(), 'autofill-selection')}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm flex items-center gap-2"
-                    >
-                      {copied === 'autofill-selection' ? (
-                        <CheckCircle className="h-4 w-4" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                      {copied === 'autofill-selection' ? 'Copied!' : 'Copy Script'}
-                    </button>
+            {/* Warning for insufficient interactions */}
+            {selectedInteractions.size > 0 && selectedInteractions.size < 3 && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-amber-600 dark:text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
                   </div>
-
-                  <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded p-3 font-mono text-xs text-gray-900 dark:text-gray-100 max-h-40 overflow-y-auto">
-                    {generateAutofillScriptFromSelection()}
+                  <div>
+                    <h3 className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                      Minimum Interactions Required
+                    </h3>
+                    <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                      Weekly reports require at least 3 interactions. You have selected {selectedInteractions.size} interaction{selectedInteractions.size === 1 ? '' : 's'}. Please select {3 - selectedInteractions.size} more interaction{3 - selectedInteractions.size === 1 ? '' : 's'} to generate a complete report.
+                    </p>
                   </div>
-
-                  <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 text-center">
-                    Paste this script in your browser console (F12) on the report form page
-                  </p>
                 </div>
               </div>
             )}
 
-            {/* Action Button */}
-            <button
-              onClick={markSelectedAsSubmitted}
-              disabled={selectedInteractions.size === 0 || submitting}
-              className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium"
-            >
-              {submitting ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
-                  Marking as Submitted...
-                </>
-              ) : (
-                <>
-                  <Send className="h-5 w-5" />
-                  Mark as Submitted ({selectedInteractions.size})
-                </>
-              )}
-            </button>
+            {/* Autofill Script Section */}
+            {selectedInteractions.size > 0 && (
+              <div className="border-t border-gray-200 dark:border-gray-600 pt-6">
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <h3 className="font-medium text-gray-900 dark:text-gray-100">Autofill Script</h3>
+                    {selectedInteractions.size < 3 && (
+                      <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 px-2 py-1 rounded-full">
+                        Incomplete ({selectedInteractions.size}/3)
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded p-3 font-mono text-xs text-gray-900 dark:text-gray-100 max-h-40 overflow-y-auto mb-3">
+                    {generateAutofillScriptFromSelection()}
+                  </div>
+
+                  <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-4">
+                    Paste this script in your browser console (F12) on the report form page
+                  </p>
+
+                  {/* Copy Script Button */}
+                  <button
+                    onClick={() => copyToClipboard(generateAutofillScriptFromSelection(), 'autofill-selection')}
+                    disabled={selectedInteractions.size < 3}
+                    className={`w-full px-4 py-3 rounded-lg text-sm flex items-center justify-center gap-2 font-medium mb-4 ${
+                      selectedInteractions.size < 3
+                        ? 'bg-gray-400 dark:bg-gray-600 text-gray-700 dark:text-gray-300 cursor-not-allowed opacity-50' 
+                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    {copied === 'autofill-selection' ? (
+                      <CheckCircle className="h-4 w-4" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                    {copied === 'autofill-selection' ? 'Copied!' : (
+                      selectedInteractions.size < 3 
+                        ? `Copy Script (Need ${3 - selectedInteractions.size} more interactions)`
+                        : 'Copy Script'
+                    )}
+                  </button>
+
+                  {/* Mark as Submitted Button */}
+                  <button
+                    onClick={markSelectedAsSubmitted}
+                    disabled={selectedInteractions.size === 0 || submitting || selectedInteractions.size < 3}
+                    className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium"
+                  >
+                    {submitting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                        Marking as Submitted...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-5 w-5" />
+                        Mark as Submitted ({selectedInteractions.size})
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

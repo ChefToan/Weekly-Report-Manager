@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('user_id', currentUser.id) // Filter by current user
-      .order('date', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (weekStarting) {
       query = query.eq('week_starting', weekStarting);

@@ -44,6 +44,15 @@ interface ResidentsGridProps {
   onInteractionUpdate?: () => void;
 }
 
+// Helper function to get local date string (avoids timezone offset issues)
+const getLocalDateString = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const InteractionCell: React.FC<{
   resident: Resident;
   interaction: Interaction | null;
@@ -196,7 +205,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
   const [showPopover, setShowPopover] = useState<{residentId: string, column: number} | null>(null);
   const [interactionFormData, setInteractionFormData] = useState<InteractionFormData>({
     details: '',
-    date: new Date().toISOString().split('T')[0]
+    date: getLocalDateString()
   });
   const [showAddResidents, setShowAddResidents] = useState(false);
 
@@ -267,7 +276,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
   const [deletingInteraction, setDeletingInteraction] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<InteractionFormData>({
     details: '',
-    date: new Date().toISOString().split('T')[0]
+    date: getLocalDateString()
   });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -563,7 +572,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         setEditingInteraction(null);
         setEditFormData({
           details: '',
-          date: new Date().toISOString().split('T')[0]
+          date: getLocalDateString()
         });
         if (markAsSubmitted) {
           alert('Interaction updated and marked as submitted!');
@@ -622,7 +631,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         setShowPopover(null);
         setInteractionFormData({
           details: '',
-          date: new Date().toISOString().split('T')[0]
+          date: getLocalDateString()
         });
       } else {
         const responseText = await response.text();

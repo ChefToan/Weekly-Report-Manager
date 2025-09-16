@@ -1178,7 +1178,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
                               {interaction.residentName}
                             </p>
                             <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-600 px-2 py-1 rounded">
-                              {format(new Date(interaction.date), 'MMM dd')}
+                              {interaction.created_at ? format(new Date(interaction.created_at), 'MMM dd') : format(new Date(interaction.date + 'T12:00:00'), 'MMM dd')}
                             </span>
                           </div>
                           <p className="text-sm text-gray-600 dark:text-gray-400 truncate">

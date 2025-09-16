@@ -8,6 +8,7 @@ interface Interaction {
   resident_id: string;
   details: string;
   date: string;
+  created_at?: string;
   column?: number;
   is_submitted?: boolean;
 }

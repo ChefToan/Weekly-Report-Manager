@@ -31,6 +31,7 @@ interface Interaction {
   resident_id: string;
   details: string;
   date: string;
+  created_at?: string;
   column?: number;
   is_submitted?: boolean;
 }
@@ -51,6 +52,19 @@ const getLocalDateString = () => {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+// Helper function to format date string without timezone issues
+const formatDateString = (dateString: string) => {
+  // Parse date as local time by adding 'T12:00:00' to avoid UTC interpretation
+  const date = new Date(dateString + 'T12:00:00');
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+// Helper function to format created_at timestamp to local date
+const formatTimestampToLocalDate = (timestamp: string) => {
+  const date = new Date(timestamp);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
 const InteractionCell: React.FC<{
@@ -126,7 +140,7 @@ const InteractionCell: React.FC<{
                     ? 'text-green-700 dark:text-green-400'
                     : 'text-yellow-700 dark:text-yellow-400'
             }`}>
-              {new Date(interaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              {interaction.created_at ? formatTimestampToLocalDate(interaction.created_at) : formatDateString(interaction.date)}
               {isSubmitted && ' • Submitted'}
             </div>
             <div

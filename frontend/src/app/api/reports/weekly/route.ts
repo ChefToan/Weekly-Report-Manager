@@ -44,11 +44,11 @@ export async function GET(request: NextRequest) {
     const requiredInteractions = interactions?.slice(0, 3) || [];
     const additionalInteractions = interactions?.slice(3) || [];
 
-    const formatInteractionForReport = (interaction: { id: string, residents?: { empl_id: string }, details: string, date: string }) => ({
+    const formatInteractionForReport = (interaction: { id: string, residents?: { empl_id: string }, details: string, date: string, created_at?: string }) => ({
       id: interaction.id,
       residentId: interaction.residents?.empl_id || '',
       details: interaction.details,
-      date: format(new Date(interaction.date), 'yyyy-MM-dd'),
+      date: interaction.created_at ? format(new Date(interaction.created_at), 'yyyy-MM-dd') : format(new Date(interaction.date + 'T12:00:00'), 'yyyy-MM-dd'),
     });
 
     const report = {

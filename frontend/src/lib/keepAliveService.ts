@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import { createClient } from '@supabase/supabase-js';
 
 // Multiple API sources for reliability
@@ -21,7 +21,7 @@ const API_SOURCES = [
 ];
 
 let isRunning = false;
-let cronJob: cron.ScheduledTask | null = null;
+let cronJob: ReturnType<typeof cron.schedule> | null = null;
 
 /**
  * Fetches a random image from multiple API sources with retry logic
@@ -44,18 +44,17 @@ async function fetchImageFromAPIs(): Promise<{ url: string; source: string } | n
       const imageUrl = source.extractUrl(data);
 
       if (imageUrl && typeof imageUrl === 'string') {
-        console.log(`[Keep-Alive] ✅ Successfully fetched from ${source.name}: ${imageUrl}`);
+        console.log(`[Keep-Alive] Successfully fetched from ${source.name}: ${imageUrl}`);
         return { url: imageUrl, source: source.name };
       } else {
         console.error(`[Keep-Alive] ${source.name} returned invalid data`);
       }
     } catch (error) {
       console.error(`[Keep-Alive] Error fetching from ${source.name}:`, error);
-      continue;
     }
   }
 
-  console.error('[Keep-Alive] ❌ All API sources failed');
+  console.error('[Keep-Alive] All API sources failed');
   return null;
 }
 
@@ -75,7 +74,7 @@ async function cleanupOldData(supabase: any): Promise<void> {
     if (error) {
       console.error('[Keep-Alive] Error cleaning up old data:', error);
     } else if (data && data.length > 0) {
-      console.log(`[Keep-Alive] 🧹 Cleaned up ${data.length} old entries`);
+      console.log(`[Keep-Alive] Cleaned up ${data.length} old entries`);
     }
   } catch (error) {
     console.error('[Keep-Alive] Cleanup error:', error);
@@ -87,13 +86,13 @@ async function cleanupOldData(supabase: any): Promise<void> {
  */
 async function keepDatabaseActive(): Promise<void> {
   if (isRunning) {
-    console.log('[Keep-Alive] ⏭️  Skipping - already running');
+    console.log('[Keep-Alive] Skipping - already running');
     return;
   }
 
   isRunning = true;
   const startTime = Date.now();
-  console.log(`[Keep-Alive] 🚀 Starting keep-alive process at ${new Date().toISOString()}`);
+  console.log(`[Keep-Alive] Starting keep-alive process at ${new Date().toISOString()}`);
 
   try {
     // Initialize Supabase client
@@ -122,11 +121,11 @@ async function keepDatabaseActive(): Promise<void> {
       ? (now.getTime() - lastFetchTime.getTime()) / (1000 * 60 * 60)
       : 25;
 
-    console.log(`[Keep-Alive] ⏰ Hours since last fetch: ${hoursSinceLastFetch.toFixed(2)}`);
+    console.log(`[Keep-Alive] Hours since last fetch: ${hoursSinceLastFetch.toFixed(2)}`);
 
     // Only fetch if it's been more than 24 hours
     if (hoursSinceLastFetch < 24) {
-      console.log(`[Keep-Alive] ⏭️  Skipping - last fetch was ${hoursSinceLastFetch.toFixed(2)} hours ago`);
+      console.log(`[Keep-Alive] Skipping - last fetch was ${hoursSinceLastFetch.toFixed(2)} hours ago`);
       isRunning = false;
       return;
     }
@@ -135,7 +134,7 @@ async function keepDatabaseActive(): Promise<void> {
     const result = await fetchImageFromAPIs();
 
     if (!result) {
-      console.error('[Keep-Alive] ❌ Failed to fetch image from all sources');
+      console.error('[Keep-Alive] Failed to fetch image from all sources');
       isRunning = false;
       return;
     }
@@ -144,7 +143,7 @@ async function keepDatabaseActive(): Promise<void> {
     await cleanupOldData(supabase);
 
     // Insert new photo
-    const { data: insertData, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from('refresh_photos')
       .insert({
         image_url: result.url,
@@ -154,23 +153,23 @@ async function keepDatabaseActive(): Promise<void> {
       .select();
 
     if (insertError) {
-      console.error('[Keep-Alive] ❌ Error inserting data:', insertError);
+      console.error('[Keep-Alive] Error inserting data:', insertError);
     } else {
-      console.log(`[Keep-Alive] ✅ Successfully saved new image from ${result.source} to database`);
+      console.log(`[Keep-Alive] Successfully saved new image from ${result.source} to database`);
 
       // Verify database count
       const { count } = await supabase
         .from('refresh_photos')
         .select('*', { count: 'exact', head: true });
 
-      console.log(`[Keep-Alive] 📊 Total entries in database: ${count}`);
+      console.log(`[Keep-Alive] Total entries in database: ${count}`);
     }
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`[Keep-Alive] ✅ Completed in ${duration}s`);
+    console.log(`[Keep-Alive] Completed in ${duration}s`);
 
   } catch (error) {
-    console.error('[Keep-Alive] ❌ Fatal error:', error);
+    console.error('[Keep-Alive] Fatal error:', error);
   } finally {
     isRunning = false;
   }
@@ -181,42 +180,43 @@ async function keepDatabaseActive(): Promise<void> {
  */
 export function startKeepAlive(): void {
   if (cronJob) {
-    console.log('[Keep-Alive] ⚠️  Cron job already running');
+    console.log('[Keep-Alive] Cron job already running');
     return;
   }
 
   // Run immediately on startup
-  console.log('[Keep-Alive] 🎬 Starting keep-alive service...');
+  console.log('[Keep-Alive] Starting keep-alive service...');
   keepDatabaseActive().catch(console.error);
 
   // Schedule to run every 24 hours at 12:00 AM Arizona Time
   // Format: second minute hour day month weekday
   cronJob = cron.schedule('0 0 0 * * *', () => {
-    console.log('[Keep-Alive] ⏰ Scheduled execution triggered');
+    console.log('[Keep-Alive] Scheduled execution triggered');
     keepDatabaseActive().catch(console.error);
   }, {
-    scheduled: true,
     timezone: "America/Phoenix" // Arizona Time (no DST)
   });
 
-  console.log('[Keep-Alive] ✅ Cron job scheduled - will run daily at 12:00 AM Arizona Time');
+  console.log('[Keep-Alive] Cron job scheduled - will run daily at 12:00 AM Arizona Time');
 }
 
 /**
  * Stops the cron job
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function stopKeepAlive(): void {
   if (cronJob) {
     cronJob.stop();
     cronJob = null;
-    console.log('[Keep-Alive] ⏹️  Cron job stopped');
+    console.log('[Keep-Alive] Cron job stopped');
   }
 }
 
 /**
  * Force run the keep-alive process (for testing)
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function forceRun(): Promise<void> {
-  console.log('[Keep-Alive] 🔧 Force running keep-alive...');
+  console.log('[Keep-Alive] Force running keep-alive...');
   return keepDatabaseActive();
 }

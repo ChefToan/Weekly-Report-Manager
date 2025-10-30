@@ -1,53 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
-// Keep-alive function - fetches dog photo daily to prevent Supabase inactivity pause
-async function keepDatabaseActive(supabase: any) {
-  try {
-    // Check if we need to fetch a new dog photo (if last one is older than 24 hours)
-    const { data: lastPhoto } = await supabase
-      .from('dog_photos')
-      .select('fetched_at')
-      .order('fetched_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    const now = new Date();
-    const lastFetchTime = lastPhoto ? new Date(lastPhoto.fetched_at) : null;
-    const hoursSinceLastFetch = lastFetchTime
-      ? (now.getTime() - lastFetchTime.getTime()) / (1000 * 60 * 60)
-      : 25; // If no photo exists, trigger fetch
-
-    // Only fetch if it's been more than 24 hours
-    if (hoursSinceLastFetch > 24) {
-      // Fetch random dog photo from Dog CEO API
-      const dogResponse = await fetch('https://dog.ceo/api/breeds/image/random');
-      const dogData = await dogResponse.json();
-
-      if (dogData.message) {
-        // Delete photos older than 24 hours
-        await supabase
-          .from('dog_photos')
-          .delete()
-          .lt('fetched_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
-
-        // Insert new photo
-        await supabase
-          .from('dog_photos')
-          .insert({
-            image_url: dogData.message,
-            fetched_at: now.toISOString(),
-          });
-      }
-    }
-  } catch (error) {
-    // Silent fail - don't break auth if keep-alive fails
-    console.error('Keep-alive error:', error);
-  }
-}
-
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const cookieStore = await cookies();
     const sessionToken = cookieStore.get('session_token')?.value;
@@ -68,9 +23,6 @@ export async function GET(request: NextRequest) {
         }
       }
     );
-
-    // Run keep-alive in background (non-blocking)
-    keepDatabaseActive(supabase).catch(console.error);
 
     // Get session and user data
     

@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   compress: true,
-  
+
   // Fix: Move serverComponentsExternalPackages from experimental to serverExternalPackages
   serverExternalPackages: ['bcryptjs'],
   

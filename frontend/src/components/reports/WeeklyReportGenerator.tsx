@@ -27,6 +27,7 @@ interface WeeklyReportGeneratorProps {
 
 export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyReportGeneratorProps) {
   const { user } = useAuth();
+  const MAX_INTERACTIONS = 43; // 3 required + 20 additional on page 2, + 20 on page 3
 
   // Helper function to get current date in user's local timezone
   const getCurrentLocalDate = () => {
@@ -117,18 +118,24 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     if (newSelection.has(interactionId)) {
       newSelection.delete(interactionId);
     } else {
+      // Check if we've reached the limit
+      if (newSelection.size >= MAX_INTERACTIONS) {
+        alert(`Maximum of ${MAX_INTERACTIONS} interactions allowed per weekly report (3 required + 20 additional on page 2, and 20 more on page 3).`);
+        return;
+      }
       newSelection.add(interactionId);
     }
     setSelectedInteractions(newSelection);
   };
 
   const toggleSelectAll = () => {
-    if (selectedInteractions.size === allUnsubmittedInteractions.length) {
+    if (selectedInteractions.size === Math.min(allUnsubmittedInteractions.length, MAX_INTERACTIONS)) {
       setSelectedInteractions(new Set());
     } else {
       const allIds = allUnsubmittedInteractions
         .filter(interaction => interaction.id)
-        .map(interaction => interaction.id!);
+        .map(interaction => interaction.id!)
+        .slice(0, MAX_INTERACTIONS); // Limit to MAX_INTERACTIONS
       setSelectedInteractions(new Set(allIds));
     }
   };
@@ -266,19 +273,20 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     if (!report) return '';
 
     // Filter out submitted interactions - only include unsubmitted ones in autofill
-    const unsubmittedRequired = report.requiredInteractions.filter(interaction => 
+    const unsubmittedRequired = report.requiredInteractions.filter(interaction =>
       // Check if this interaction exists in our unsubmitted list
       allUnsubmittedInteractions.some(unsubmitted => unsubmitted.id === interaction.id)
     );
-    const unsubmittedAdditional = report.additionalInteractions.filter(interaction => 
+    const unsubmittedAdditional = report.additionalInteractions.filter(interaction =>
       allUnsubmittedInteractions.some(unsubmitted => unsubmitted.id === interaction.id)
     );
-    
+
     // Combine required and additional interactions for the autofill script (only unsubmitted)
+    // Cap at MAX_INTERACTIONS (43 total: 3 required + 20 on page 2 + 20 on page 3)
     const allInteractions = [
       ...unsubmittedRequired.slice(0, 3), // Take first 3 required (only unsubmitted)
-      ...unsubmittedAdditional.slice(0, 20) // Take up to 20 additional (only unsubmitted)
-    ];
+      ...unsubmittedAdditional.slice(0, 40) // Take up to 40 additional (only unsubmitted)
+    ].slice(0, MAX_INTERACTIONS);
 
     const interactions = allInteractions.map(interaction => ({
       id: interaction.residentEmplId || interaction.residentId,
@@ -287,9 +295,11 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
     const userAsuId = user?.asu_id || '1234567890'; // Fallback if user not available
 
-    // Add warning comment if less than 3 interactions available
-    const warningComment = interactions.length < 3 
+    // Add warning comment if less than 3 interactions available or over the limit
+    const warningComment = interactions.length < 3
       ? `// ⚠️ WARNING: Only ${interactions.length} interaction${interactions.length === 1 ? '' : 's'} available for this week. Weekly reports typically require at least 3 interactions.\n// Consider adding more interactions or selecting a different week.\n\n`
+      : interactions.length > MAX_INTERACTIONS
+      ? `// ⚠️ NOTE: ${interactions.length} interactions found, but only ${MAX_INTERACTIONS} will be used (maximum per report).\n\n`
       : '';
 
     return `${warningComment}(function() {
@@ -738,16 +748,18 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
   const generateAutofillScriptFromSelection = () => {
     if (selectedInteractions.size === 0) return '';
 
-    // Get selected interactions from our unsubmitted list
-    const selectedInteractionsList = allUnsubmittedInteractions.filter(interaction => 
-      interaction.id && selectedInteractions.has(interaction.id)
-    );
+    // Get selected interactions from our unsubmitted list and cap at MAX_INTERACTIONS
+    const selectedInteractionsList = allUnsubmittedInteractions
+      .filter(interaction => interaction.id && selectedInteractions.has(interaction.id))
+      .slice(0, MAX_INTERACTIONS);
 
     if (selectedInteractionsList.length === 0) return '';
 
     // Add warning comment if less than 3 interactions selected
-    const warningComment = selectedInteractionsList.length < 3 
+    const warningComment = selectedInteractionsList.length < 3
       ? `// ⚠️ WARNING: Only ${selectedInteractionsList.length} interaction${selectedInteractionsList.length === 1 ? '' : 's'} selected. Weekly reports typically require at least 3 interactions.\n// Consider adding ${3 - selectedInteractionsList.length} more interaction${3 - selectedInteractionsList.length === 1 ? '' : 's'} for a complete report.\n\n`
+      : selectedInteractionsList.length > MAX_INTERACTIONS
+      ? `// ⚠️ WARNING: ${selectedInteractionsList.length} interactions selected, but only ${MAX_INTERACTIONS} will be used (maximum per report).\n\n`
       : '';
 
     const interactions = selectedInteractionsList.map(interaction => ({
@@ -1425,6 +1437,27 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
                   </div>
                 )}
 
+                {/* Warning for exceeding maximum interactions */}
+                {totalUnsubmitted > MAX_INTERACTIONS && (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-600 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                          Maximum Interactions Limit
+                        </h3>
+                        <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
+                          You have {totalUnsubmitted} interactions for this week, but only {MAX_INTERACTIONS} can be submitted per report (3 required + 20 additional on page 2, and 20 more on page 3). The autofill script will use the first {MAX_INTERACTIONS} interactions.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Autofill Script Section - only show if there are unsubmitted interactions */}
                 {totalUnsubmitted > 0 && (
                   <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
@@ -1521,16 +1554,21 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-400">
                   {allUnsubmittedInteractions.length} available interactions
+                  {allUnsubmittedInteractions.length > MAX_INTERACTIONS && (
+                    <span className="ml-2 text-amber-600 dark:text-amber-400 text-xs">
+                      (Max {MAX_INTERACTIONS} per report)
+                    </span>
+                  )}
                 </span>
                 <label className="flex items-center text-sm">
                   <input
                     type="checkbox"
-                    checked={selectedInteractions.size === allUnsubmittedInteractions.length && allUnsubmittedInteractions.length > 0}
+                    checked={selectedInteractions.size === Math.min(allUnsubmittedInteractions.length, MAX_INTERACTIONS)}
                     onChange={toggleSelectAll}
                     className="rounded border-gray-300 dark:border-gray-600 text-green-600"
                   />
                   <span className="ml-2 text-gray-700 dark:text-gray-300">
-                    Select All ({selectedInteractions.size}/{allUnsubmittedInteractions.length})
+                    Select All ({selectedInteractions.size}/{Math.min(allUnsubmittedInteractions.length, MAX_INTERACTIONS)})
                   </span>
                 </label>
               </div>
@@ -1543,16 +1581,25 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
                   </div>
                 ) : (
                   <div className="divide-y divide-gray-200 dark:divide-gray-600">
-                    {allUnsubmittedInteractions.map((interaction) => (
+                    {allUnsubmittedInteractions.map((interaction) => {
+                      const isSelected = interaction.id ? selectedInteractions.has(interaction.id) : false;
+                      const isDisabled = !isSelected && selectedInteractions.size >= MAX_INTERACTIONS;
+
+                      return (
                       <label
                         key={interaction.id}
-                        className="flex items-start p-4 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                        className={`flex items-start p-4 transition-colors ${
+                          isDisabled
+                            ? 'opacity-50 cursor-not-allowed'
+                            : 'hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer'
+                        }`}
                       >
                         <input
                           type="checkbox"
-                          checked={interaction.id ? selectedInteractions.has(interaction.id) : false}
+                          checked={isSelected}
+                          disabled={isDisabled}
                           onChange={() => interaction.id && toggleInteractionSelection(interaction.id)}
-                          className="mt-1 rounded border-gray-300 dark:border-gray-600 text-green-600"
+                          className="mt-1 rounded border-gray-300 dark:border-gray-600 text-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                         <div className="ml-3 flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
@@ -1568,15 +1615,24 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
                           </p>
                         </div>
                       </label>
-                    ))}
+                    )})}
                   </div>
                 )}
               </div>
 
               {selectedInteractions.size > 0 && (
-                <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                  <span className="text-green-700 dark:text-green-300 font-medium">
-                    {selectedInteractions.size} interactions selected
+                <div className={`text-center p-3 rounded-lg ${
+                  selectedInteractions.size >= MAX_INTERACTIONS
+                    ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-600'
+                    : 'bg-green-50 dark:bg-green-900/20'
+                }`}>
+                  <span className={`font-medium ${
+                    selectedInteractions.size >= MAX_INTERACTIONS
+                      ? 'text-amber-700 dark:text-amber-300'
+                      : 'text-green-700 dark:text-green-300'
+                  }`}>
+                    {selectedInteractions.size} / {MAX_INTERACTIONS} interactions selected
+                    {selectedInteractions.size >= MAX_INTERACTIONS && ' (Maximum reached)'}
                   </span>
                 </div>
               )}

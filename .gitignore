@@ -1,22 +1,46 @@
 # Dependencies
 node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Environment variables
+# Environment
 .env*
 !.env.example
 
-# IDE and editor files
+# Testing
+coverage/
+*.lcov
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Build
+dist/
+build/
+
+# Vercel
+.vercel
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS generated files
+# OS
 .DS_Store
 .DS_Store?
 ._*
@@ -24,59 +48,39 @@ yarn-error.log*
 .Trashes
 ehthumbs.db
 Thumbs.db
+*.pem
 
 # Logs
 logs/
 *.log
 
-# Runtime data
+# Runtime
 pids/
 *.pid
 *.seed
 *.pid.lock
 
-# Coverage directory used by tools like istanbul
-coverage/
-*.lcov
-
-# Build outputs
-dist/
-build/
-out/
-
-# Next.js specific (frontend)
-frontend/.next/
-frontend/out/
-frontend/*.tsbuildinfo
-
-# Temporary files
+# Temp
 tmp/
 temp/
 *.tmp
 *.temp
 
-# Database files (if using local DB files)
+# Database
 *.db
 *.sqlite
 *.sqlite3
 
-# Backup files
+# Backups
 *.bak
 *.backup
 
-# Config files that might contain secrets
+# Config
 config/local.json
 config/production.json
 
-# Package manager lock files (uncomment if you want to ignore them)
-# package-lock.json
-# yarn.lock
-# pnpm-lock.yaml
-
-# Miscellaneous
+# Misc
 *.tgz
 *.tar.gz
 cookies.txt
-
-# Documentation files to exclude
 CLAUDE.md

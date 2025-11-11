@@ -90,6 +90,12 @@ async function keepDatabaseActive(): Promise<void> {
     return;
   }
 
+  // Check if required environment variables are set
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[Keep-Alive] Missing required environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in frontend/.env');
+    return;
+  }
+
   isRunning = true;
   const startTime = Date.now();
   console.log(`[Keep-Alive] Starting keep-alive process at ${new Date().toISOString()}`);

@@ -434,20 +434,20 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     function handleRadioAndSubmit() {
         try {
             console.log('📝 Handling radio selection...');
-            
+
             // Calculate if we need more interactions
             const totalFilled = Math.min(interactions.length, 23); // 3 required + 20 additional max on page 2
             const needsMore = interactions.length > 23;
-            
+
             console.log(\`📊 Total interactions: \${interactions.length}\`);
             console.log(\`📊 Filled on page 2: \${totalFilled}\`);
             console.log(\`📊 Remaining: \${Math.max(0, interactions.length - 23)}\`);
             console.log(\`📊 Needs more pages: \${needsMore}\`);
-            
+
             // Use getElementById for IDs that start with numbers
             const radioYes = document.getElementById('808166128ID');
             const radioNo = document.getElementById('808166129ID');
-            
+
             if (needsMore && radioYes) {
                 radioYes.checked = true;
                 radioYes.dispatchEvent(new Event('change', { bubbles: true }));
@@ -457,52 +457,239 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
                 radioNo.dispatchEvent(new Event('change', { bubbles: true }));
                 console.log('✅ Selected "No" - all interactions fit on page 2');
             }
-            
+
             // Click Next button
             setTimeout(() => {
                 const nextBtn = document.querySelector('#SurveySubmitButtonElement');
                 if (nextBtn) {
                     console.log('🎯 Clicking Next button...');
                     nextBtn.click();
-                    
-                    // Monitor for popup
+
+                    // Monitor for popup or next page
                     setTimeout(() => {
-                        monitorForPopup();
+                        monitorForPopupOrNextPage(needsMore);
                     }, 2000);
                 }
             }, 1000);
-            
+
         } catch (error) {
             console.error('❌ Error handling radio and submit:', error);
             isProcessing = false;
         }
     }
-    
-    // Function to monitor for popup
-    function monitorForPopup() {
-        console.log('🔍 Monitoring for popup or next page...');
-        
-        const popup = document.querySelector('#requestResponseDialog');
-        if (popup && popup.style.display !== 'none') {
-            console.log('⚠️ Popup detected - waiting for user decision');
-            console.log('ℹ️ User can click "Continue Without Answering" to proceed');
-            isProcessing = false;
-            return;
-        }
-        
-        // Check if we successfully moved to next page
-        setTimeout(() => {
-            const currentPage = detectCurrentPage();
-            if (currentPage === 'page3' || currentPage === 'unknown') {
-                console.log('✅ Successfully completed autofill process!');
+
+    // Function to monitor for popup or navigate to next page
+    function monitorForPopupOrNextPage(expectPage3) {
+        let attempts = 0;
+        const maxAttempts = 10;
+
+        const checkStatus = () => {
+            attempts++;
+            console.log(\`🔍 Checking for popup or next page... (attempt \${attempts})\`);
+
+            // Check for "Response Requested" dialog
+            const dialogButtons = document.querySelectorAll('.modal-content .btn-modal-secondary');
+            let continueBtn = null;
+
+            for (const btn of dialogButtons) {
+                if (btn.textContent.includes('Continue Without Answering')) {
+                    continueBtn = btn;
+                    break;
+                }
+            }
+
+            if (continueBtn && continueBtn.offsetParent !== null) {
+                console.log('⚠️ "Response Requested" dialog detected - clicking "Continue Without Answering"...');
+                continueBtn.click();
+
+                // After clicking continue, check what happens next
+                setTimeout(() => {
+                    if (expectPage3) {
+                        monitorForPage3();
+                    } else {
+                        console.log('✅ Navigating to page 4 (final page)');
+                        isProcessing = false;
+                    }
+                }, 2000);
+                return;
+            }
+
+            // Check if we're already on page 3
+            if (expectPage3 && document.querySelector('input[name="t_808166130"]')) {
+                console.log('📍 Page 3 detected! Starting autofill...');
+                isProcessing = false;
+                setTimeout(() => fillPage3(), 1500);
+                return;
+            }
+
+            // Check if we're on page 4 or beyond (no more interactions)
+            if (!expectPage3 && !document.querySelector('input[name="t_808166082"]')) {
+                console.log('✅ Successfully navigated to page 4!');
                 console.log(\`📊 Total interactions processed: \${interactions.length}\`);
                 isProcessing = false;
-            } else if (currentPage === 'page2.1') {
-                console.log('📍 Moved to Page 2.1 for additional interactions');
-                // Could add logic here to fill Page 2.1 if needed
+                return;
+            }
+
+            if (attempts < maxAttempts) {
+                setTimeout(checkStatus, 1000);
+            } else {
+                console.log('❌ Maximum attempts reached. Please check the page manually.');
                 isProcessing = false;
             }
-        }, 1000);
+        };
+
+        checkStatus();
+    }
+
+    // Function to monitor for Page 3 after dialog handling
+    function monitorForPage3() {
+        let attempts = 0;
+        const maxAttempts = 15;
+
+        const checkForPage3 = () => {
+            attempts++;
+            console.log(\`🔍 Checking for Page 3... (attempt \${attempts})\`);
+
+            if (document.querySelector('input[name="t_808166130"]')) {
+                console.log('📍 Page 3 detected! Starting autofill...');
+                isProcessing = false;
+                setTimeout(() => fillPage3(), 1500);
+                return;
+            }
+
+            if (attempts < maxAttempts) {
+                setTimeout(checkForPage3, 1000);
+            } else {
+                console.log('❌ Page 3 not detected after maximum attempts');
+                isProcessing = false;
+            }
+        };
+
+        setTimeout(checkForPage3, 2000);
+    }
+
+    // Function to fill Page 3
+    function fillPage3() {
+        if (isProcessing) return;
+        isProcessing = true;
+
+        console.log('📝 Filling Page 3 interactions...');
+
+        // Page 3 has interactions 21-40 (20 more slots)
+        const page3Fields = [
+            { idField: 't_808166130', summaryField: 't_808166131' }, // Interaction 21
+            { idField: 't_808166132', summaryField: 't_808166133' }, // Interaction 22
+            { idField: 't_808166134', summaryField: 't_808166135' }, // Interaction 23
+            { idField: 't_808166136', summaryField: 't_808166137' }, // Interaction 24
+            { idField: 't_808166138', summaryField: 't_808166139' }, // Interaction 25
+            { idField: 't_808166140', summaryField: 't_808166141' }, // Interaction 26
+            { idField: 't_808166142', summaryField: 't_808166143' }, // Interaction 27
+            { idField: 't_808166144', summaryField: 't_808166145' }, // Interaction 28
+            { idField: 't_808166146', summaryField: 't_808166147' }, // Interaction 29
+            { idField: 't_808166148', summaryField: 't_808166149' }, // Interaction 30
+            { idField: 't_808166150', summaryField: 't_808166151' }, // Interaction 31
+            { idField: 't_808166152', summaryField: 't_808166153' }, // Interaction 32
+            { idField: 't_808166154', summaryField: 't_808166155' }, // Interaction 33
+            { idField: 't_808166156', summaryField: 't_808166157' }, // Interaction 34
+            { idField: 't_808166158', summaryField: 't_808166159' }, // Interaction 35
+            { idField: 't_808166160', summaryField: 't_808166161' }, // Interaction 36
+            { idField: 't_808166162', summaryField: 't_808166163' }, // Interaction 37
+            { idField: 't_808166164', summaryField: 't_808166165' }, // Interaction 38
+            { idField: 't_808166166', summaryField: 't_808166167' }, // Interaction 39
+            { idField: 't_808166168', summaryField: 't_808166169' }  // Interaction 40
+        ];
+
+        // Get interactions starting from index 23 (already filled 0-22 on page 2)
+        const page3Interactions = interactions.slice(23);
+        const maxPage3 = Math.min(page3Interactions.length, 20);
+
+        console.log(\`📝 Filling \${maxPage3} interactions on page 3...\`);
+
+        for (let i = 0; i < maxPage3; i++) {
+            const idField = document.querySelector(\`input[name="\${page3Fields[i].idField}"]\`);
+            const summaryField = document.querySelector(\`input[name="\${page3Fields[i].summaryField}"]\`);
+
+            if (fillField(idField, page3Interactions[i].id) && fillField(summaryField, page3Interactions[i].summary)) {
+                console.log(\`✅ Filled interaction \${23 + i + 1}\`);
+            }
+        }
+
+        // Click Next button to proceed to page 4
+        setTimeout(() => {
+            handlePage3Submit();
+        }, 2000);
+    }
+
+    // Function to handle Page 3 submit
+    function handlePage3Submit() {
+        try {
+            console.log('📝 Submitting Page 3...');
+
+            const nextBtn = document.querySelector('#SurveySubmitButtonElement');
+            if (nextBtn) {
+                console.log('🎯 Clicking Next button on Page 3...');
+                nextBtn.click();
+
+                // Monitor for popup again on page 3
+                setTimeout(() => {
+                    monitorForPage3Popup();
+                }, 2000);
+            }
+        } catch (error) {
+            console.error('❌ Error submitting Page 3:', error);
+            isProcessing = false;
+        }
+    }
+
+    // Function to monitor for popup on Page 3
+    function monitorForPage3Popup() {
+        let attempts = 0;
+        const maxAttempts = 10;
+
+        const checkStatus = () => {
+            attempts++;
+            console.log(\`🔍 Checking for Page 3 popup or final page... (attempt \${attempts})\`);
+
+            // Check for "Response Requested" dialog
+            const dialogButtons = document.querySelectorAll('.modal-content .btn-modal-secondary');
+            let continueBtn = null;
+
+            for (const btn of dialogButtons) {
+                if (btn.textContent.includes('Continue Without Answering')) {
+                    continueBtn = btn;
+                    break;
+                }
+            }
+
+            if (continueBtn && continueBtn.offsetParent !== null) {
+                console.log('⚠️ "Response Requested" dialog detected on Page 3 - clicking "Continue Without Answering"...');
+                continueBtn.click();
+
+                setTimeout(() => {
+                    console.log('✅ Successfully navigated to page 4!');
+                    console.log(\`📊 Total interactions processed: \${interactions.length}\`);
+                    isProcessing = false;
+                }, 2000);
+                return;
+            }
+
+            // Check if we're already on page 4 or beyond
+            if (!document.querySelector('input[name="t_808166130"]') && !document.querySelector('input[name="t_808166082"]')) {
+                console.log('✅ Successfully navigated to page 4!');
+                console.log(\`📊 Total interactions processed: \${interactions.length}\`);
+                isProcessing = false;
+                return;
+            }
+
+            if (attempts < maxAttempts) {
+                setTimeout(checkStatus, 1000);
+            } else {
+                console.log('❌ Maximum attempts reached. Please check the page manually.');
+                isProcessing = false;
+            }
+        };
+
+        checkStatus();
     }
     
     // Function to detect current page
@@ -511,10 +698,10 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             return 'page1';
         } else if (document.querySelector('input[name="t_808166082"]')) {
             return 'page2';
-        } else if (document.querySelector('input[name="t_808166130"]')) { // Assuming continuation
-            return 'page2.1';
+        } else if (document.querySelector('input[name="t_808166130"]')) {
+            return 'page3';
         } else {
-            return 'unknown';
+            return 'page4_or_beyond';
         }
     }
     
@@ -522,7 +709,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     function startAutofill() {
         const currentPage = detectCurrentPage();
         console.log('🔍 Detecting current page...');
-        
+
         switch(currentPage) {
             case 'page1':
                 console.log('📍 Detected Page 1');
@@ -531,6 +718,10 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             case 'page2':
                 console.log('📍 Detected Page 2');
                 fillPage2();
+                break;
+            case 'page3':
+                console.log('📍 Detected Page 3');
+                fillPage3();
                 break;
             default:
                 console.log('📍 Page not recognized or already completed');
@@ -708,20 +899,20 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     function handleRadioAndSubmit() {
         try {
             console.log('📝 Handling radio selection...');
-            
+
             // Calculate if we need more interactions
             const totalFilled = Math.min(interactions.length, 23); // 3 required + 20 additional max on page 2
             const needsMore = interactions.length > 23;
-            
+
             console.log(\`📊 Total interactions: \${interactions.length}\`);
             console.log(\`📊 Filled on page 2: \${totalFilled}\`);
             console.log(\`📊 Remaining: \${Math.max(0, interactions.length - 23)}\`);
             console.log(\`📊 Needs more pages: \${needsMore}\`);
-            
+
             // Use getElementById for IDs that start with numbers
             const radioYes = document.getElementById('808166128ID');
             const radioNo = document.getElementById('808166129ID');
-            
+
             if (needsMore && radioYes) {
                 radioYes.checked = true;
                 radioYes.dispatchEvent(new Event('change', { bubbles: true }));
@@ -731,52 +922,239 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
                 radioNo.dispatchEvent(new Event('change', { bubbles: true }));
                 console.log('✅ Selected "No" - all interactions fit on page 2');
             }
-            
+
             // Click Next button
             setTimeout(() => {
                 const nextBtn = document.querySelector('#SurveySubmitButtonElement');
                 if (nextBtn) {
                     console.log('🎯 Clicking Next button...');
                     nextBtn.click();
-                    
-                    // Monitor for popup
+
+                    // Monitor for popup or next page
                     setTimeout(() => {
-                        monitorForPopup();
+                        monitorForPopupOrNextPage(needsMore);
                     }, 2000);
                 }
             }, 1000);
-            
+
         } catch (error) {
             console.error('❌ Error handling radio and submit:', error);
             isProcessing = false;
         }
     }
-    
-    // Function to monitor for popup
-    function monitorForPopup() {
-        console.log('🔍 Monitoring for popup or next page...');
-        
-        const popup = document.querySelector('#requestResponseDialog');
-        if (popup && popup.style.display !== 'none') {
-            console.log('⚠️ Popup detected - waiting for user decision');
-            console.log('ℹ️ User can click "Continue Without Answering" to proceed');
-            isProcessing = false;
-            return;
-        }
-        
-        // Check if we successfully moved to next page
-        setTimeout(() => {
-            const currentPage = detectCurrentPage();
-            if (currentPage === 'page3' || currentPage === 'unknown') {
-                console.log('✅ Successfully completed autofill process!');
+
+    // Function to monitor for popup or navigate to next page
+    function monitorForPopupOrNextPage(expectPage3) {
+        let attempts = 0;
+        const maxAttempts = 10;
+
+        const checkStatus = () => {
+            attempts++;
+            console.log(\`🔍 Checking for popup or next page... (attempt \${attempts})\`);
+
+            // Check for "Response Requested" dialog
+            const dialogButtons = document.querySelectorAll('.modal-content .btn-modal-secondary');
+            let continueBtn = null;
+
+            for (const btn of dialogButtons) {
+                if (btn.textContent.includes('Continue Without Answering')) {
+                    continueBtn = btn;
+                    break;
+                }
+            }
+
+            if (continueBtn && continueBtn.offsetParent !== null) {
+                console.log('⚠️ "Response Requested" dialog detected - clicking "Continue Without Answering"...');
+                continueBtn.click();
+
+                // After clicking continue, check what happens next
+                setTimeout(() => {
+                    if (expectPage3) {
+                        monitorForPage3();
+                    } else {
+                        console.log('✅ Navigating to page 4 (final page)');
+                        isProcessing = false;
+                    }
+                }, 2000);
+                return;
+            }
+
+            // Check if we're already on page 3
+            if (expectPage3 && document.querySelector('input[name="t_808166130"]')) {
+                console.log('📍 Page 3 detected! Starting autofill...');
+                isProcessing = false;
+                setTimeout(() => fillPage3(), 1500);
+                return;
+            }
+
+            // Check if we're on page 4 or beyond (no more interactions)
+            if (!expectPage3 && !document.querySelector('input[name="t_808166082"]')) {
+                console.log('✅ Successfully navigated to page 4!');
                 console.log(\`📊 Total interactions processed: \${interactions.length}\`);
                 isProcessing = false;
-            } else if (currentPage === 'page2.1') {
-                console.log('📍 Moved to Page 2.1 for additional interactions');
-                // Could add logic here to fill Page 2.1 if needed
+                return;
+            }
+
+            if (attempts < maxAttempts) {
+                setTimeout(checkStatus, 1000);
+            } else {
+                console.log('❌ Maximum attempts reached. Please check the page manually.');
                 isProcessing = false;
             }
-        }, 1000);
+        };
+
+        checkStatus();
+    }
+
+    // Function to monitor for Page 3 after dialog handling
+    function monitorForPage3() {
+        let attempts = 0;
+        const maxAttempts = 15;
+
+        const checkForPage3 = () => {
+            attempts++;
+            console.log(\`🔍 Checking for Page 3... (attempt \${attempts})\`);
+
+            if (document.querySelector('input[name="t_808166130"]')) {
+                console.log('📍 Page 3 detected! Starting autofill...');
+                isProcessing = false;
+                setTimeout(() => fillPage3(), 1500);
+                return;
+            }
+
+            if (attempts < maxAttempts) {
+                setTimeout(checkForPage3, 1000);
+            } else {
+                console.log('❌ Page 3 not detected after maximum attempts');
+                isProcessing = false;
+            }
+        };
+
+        setTimeout(checkForPage3, 2000);
+    }
+
+    // Function to fill Page 3
+    function fillPage3() {
+        if (isProcessing) return;
+        isProcessing = true;
+
+        console.log('📝 Filling Page 3 interactions...');
+
+        // Page 3 has interactions 21-40 (20 more slots)
+        const page3Fields = [
+            { idField: 't_808166130', summaryField: 't_808166131' }, // Interaction 21
+            { idField: 't_808166132', summaryField: 't_808166133' }, // Interaction 22
+            { idField: 't_808166134', summaryField: 't_808166135' }, // Interaction 23
+            { idField: 't_808166136', summaryField: 't_808166137' }, // Interaction 24
+            { idField: 't_808166138', summaryField: 't_808166139' }, // Interaction 25
+            { idField: 't_808166140', summaryField: 't_808166141' }, // Interaction 26
+            { idField: 't_808166142', summaryField: 't_808166143' }, // Interaction 27
+            { idField: 't_808166144', summaryField: 't_808166145' }, // Interaction 28
+            { idField: 't_808166146', summaryField: 't_808166147' }, // Interaction 29
+            { idField: 't_808166148', summaryField: 't_808166149' }, // Interaction 30
+            { idField: 't_808166150', summaryField: 't_808166151' }, // Interaction 31
+            { idField: 't_808166152', summaryField: 't_808166153' }, // Interaction 32
+            { idField: 't_808166154', summaryField: 't_808166155' }, // Interaction 33
+            { idField: 't_808166156', summaryField: 't_808166157' }, // Interaction 34
+            { idField: 't_808166158', summaryField: 't_808166159' }, // Interaction 35
+            { idField: 't_808166160', summaryField: 't_808166161' }, // Interaction 36
+            { idField: 't_808166162', summaryField: 't_808166163' }, // Interaction 37
+            { idField: 't_808166164', summaryField: 't_808166165' }, // Interaction 38
+            { idField: 't_808166166', summaryField: 't_808166167' }, // Interaction 39
+            { idField: 't_808166168', summaryField: 't_808166169' }  // Interaction 40
+        ];
+
+        // Get interactions starting from index 23 (already filled 0-22 on page 2)
+        const page3Interactions = interactions.slice(23);
+        const maxPage3 = Math.min(page3Interactions.length, 20);
+
+        console.log(\`📝 Filling \${maxPage3} interactions on page 3...\`);
+
+        for (let i = 0; i < maxPage3; i++) {
+            const idField = document.querySelector(\`input[name="\${page3Fields[i].idField}"]\`);
+            const summaryField = document.querySelector(\`input[name="\${page3Fields[i].summaryField}"]\`);
+
+            if (fillField(idField, page3Interactions[i].id) && fillField(summaryField, page3Interactions[i].summary)) {
+                console.log(\`✅ Filled interaction \${23 + i + 1}\`);
+            }
+        }
+
+        // Click Next button to proceed to page 4
+        setTimeout(() => {
+            handlePage3Submit();
+        }, 2000);
+    }
+
+    // Function to handle Page 3 submit
+    function handlePage3Submit() {
+        try {
+            console.log('📝 Submitting Page 3...');
+
+            const nextBtn = document.querySelector('#SurveySubmitButtonElement');
+            if (nextBtn) {
+                console.log('🎯 Clicking Next button on Page 3...');
+                nextBtn.click();
+
+                // Monitor for popup again on page 3
+                setTimeout(() => {
+                    monitorForPage3Popup();
+                }, 2000);
+            }
+        } catch (error) {
+            console.error('❌ Error submitting Page 3:', error);
+            isProcessing = false;
+        }
+    }
+
+    // Function to monitor for popup on Page 3
+    function monitorForPage3Popup() {
+        let attempts = 0;
+        const maxAttempts = 10;
+
+        const checkStatus = () => {
+            attempts++;
+            console.log(\`🔍 Checking for Page 3 popup or final page... (attempt \${attempts})\`);
+
+            // Check for "Response Requested" dialog
+            const dialogButtons = document.querySelectorAll('.modal-content .btn-modal-secondary');
+            let continueBtn = null;
+
+            for (const btn of dialogButtons) {
+                if (btn.textContent.includes('Continue Without Answering')) {
+                    continueBtn = btn;
+                    break;
+                }
+            }
+
+            if (continueBtn && continueBtn.offsetParent !== null) {
+                console.log('⚠️ "Response Requested" dialog detected on Page 3 - clicking "Continue Without Answering"...');
+                continueBtn.click();
+
+                setTimeout(() => {
+                    console.log('✅ Successfully navigated to page 4!');
+                    console.log(\`📊 Total interactions processed: \${interactions.length}\`);
+                    isProcessing = false;
+                }, 2000);
+                return;
+            }
+
+            // Check if we're already on page 4 or beyond
+            if (!document.querySelector('input[name="t_808166130"]') && !document.querySelector('input[name="t_808166082"]')) {
+                console.log('✅ Successfully navigated to page 4!');
+                console.log(\`📊 Total interactions processed: \${interactions.length}\`);
+                isProcessing = false;
+                return;
+            }
+
+            if (attempts < maxAttempts) {
+                setTimeout(checkStatus, 1000);
+            } else {
+                console.log('❌ Maximum attempts reached. Please check the page manually.');
+                isProcessing = false;
+            }
+        };
+
+        checkStatus();
     }
     
     // Function to detect current page
@@ -785,10 +1163,10 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             return 'page1';
         } else if (document.querySelector('input[name="t_808166082"]')) {
             return 'page2';
-        } else if (document.querySelector('input[name="t_808166130"]')) { // Assuming continuation
-            return 'page2.1';
+        } else if (document.querySelector('input[name="t_808166130"]')) {
+            return 'page3';
         } else {
-            return 'unknown';
+            return 'page4_or_beyond';
         }
     }
     
@@ -796,7 +1174,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     function startAutofill() {
         const currentPage = detectCurrentPage();
         console.log('🔍 Detecting current page...');
-        
+
         switch(currentPage) {
             case 'page1':
                 console.log('📍 Detected Page 1');
@@ -805,6 +1183,10 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             case 'page2':
                 console.log('📍 Detected Page 2');
                 fillPage2();
+                break;
+            case 'page3':
+                console.log('📍 Detected Page 3');
+                fillPage3();
                 break;
             default:
                 console.log('📍 Page not recognized or already completed');

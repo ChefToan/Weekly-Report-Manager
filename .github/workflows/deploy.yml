@@ -26,7 +26,10 @@ jobs:
           
           # Use Node.js (should match your local version)
           nvm use node || nvm use 20 || nvm use 18
-          
+
+          # Set PM2 home directory (CRITICAL FIX)
+          export PM2_HOME=/home/ubuntu/.pm2
+
           # Navigate to application directory
           cd /home/ubuntu/weekly-report-site
           

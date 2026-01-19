@@ -279,6 +279,17 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
 
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importFeedback, setImportFeedback] = useState<{
+    success: boolean;
+    message: string;
+    details?: {
+      totalRows: number;
+      validRows: number;
+      skippedRows: number;
+      detectedColumns: string[];
+      suggestion?: string;
+    };
+  } | null>(null);
   const [addMode, setAddMode] = useState<'csv' | 'manual'>('csv');
   const [manualResident, setManualResident] = useState({ name: '', empl_id: '', room: '' });
   const [selectedResidents, setSelectedResidents] = useState<Set<string>>(new Set());
@@ -329,6 +340,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
     if (!importFile) return;
 
     setImporting(true);
+    setImportFeedback(null);
     const formData = new FormData();
     formData.append('file', importFile);
 
@@ -338,19 +350,51 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         body: formData,
       });
 
+      const data = await response.json();
+
       if (response.ok) {
         await fetchResidents();
         onInteractionUpdate?.();
         setImportFile(null);
-        setShowAddResidents(false);
         const input = document.getElementById('additional-file-input') as HTMLInputElement;
         if (input) input.value = '';
+
+        // Show success feedback with details
+        const feedback = data.feedback;
+        let message = `Successfully imported ${data.imported} resident(s).`;
+        if (feedback?.skippedRows > 0) {
+          message += ` ${feedback.skippedRows} row(s) were skipped.`;
+        }
+        setImportFeedback({
+          success: true,
+          message,
+          details: feedback ? {
+            totalRows: feedback.totalRows,
+            validRows: feedback.validRows,
+            skippedRows: feedback.skippedRows,
+            detectedColumns: feedback.detectedColumns,
+          } : undefined
+        });
       } else {
-        const data = await response.json();
-        console.error('Import failed:', data.error);
+        // Show error feedback with details
+        const feedback = data.feedback;
+        setImportFeedback({
+          success: false,
+          message: data.error || 'Import failed',
+          details: feedback ? {
+            totalRows: feedback.totalRows,
+            validRows: feedback.validRows,
+            skippedRows: feedback.skippedRows,
+            detectedColumns: feedback.detectedColumns,
+            suggestion: data.suggestion,
+          } : undefined
+        });
       }
     } catch {
-      console.error('Network error occurred');
+      setImportFeedback({
+        success: false,
+        message: 'Network error occurred. Please try again.',
+      });
     } finally {
       setImporting(false);
     }
@@ -763,7 +807,10 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
                           id="additional-file-input"
                           type="file"
                           accept=".csv"
-                          onChange={handleFileSelect}
+                          onChange={(e) => {
+                            handleFileSelect(e);
+                            setImportFeedback(null);
+                          }}
                           className="block text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-white dark:file:bg-gray-700 file:text-blue-700 dark:file:text-blue-300 hover:file:bg-blue-50 dark:hover:file:bg-blue-800"
                       />
                       {importFile && (
@@ -782,6 +829,58 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
                             )}
                           </button>
                       )}
+                    </div>
+
+                    {/* Import Feedback Display */}
+                    {importFeedback && (
+                        <div className={`mt-3 p-3 rounded-md ${
+                            importFeedback.success
+                                ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700'
+                                : 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700'
+                        }`}>
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <p className={`text-sm font-medium ${
+                                  importFeedback.success
+                                      ? 'text-green-800 dark:text-green-300'
+                                      : 'text-red-800 dark:text-red-300'
+                              }`}>
+                                {importFeedback.message}
+                              </p>
+
+                              {importFeedback.details && (
+                                  <div className="mt-2 text-xs space-y-1">
+                                    <p className={importFeedback.success ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}>
+                                      Total rows: {importFeedback.details.totalRows} | Valid: {importFeedback.details.validRows} | Skipped: {importFeedback.details.skippedRows}
+                                    </p>
+                                    <p className="text-gray-600 dark:text-gray-400">
+                                      Detected columns: {importFeedback.details.detectedColumns.join(', ') || 'None'}
+                                    </p>
+                                    {importFeedback.details.suggestion && (
+                                        <p className="text-amber-700 dark:text-amber-400 mt-1">
+                                          {importFeedback.details.suggestion}
+                                        </p>
+                                    )}
+                                  </div>
+                              )}
+                            </div>
+                            <button
+                                onClick={() => setImportFeedback(null)}
+                                className={`ml-2 p-1 rounded hover:bg-opacity-20 ${
+                                    importFeedback.success
+                                        ? 'text-green-600 dark:text-green-400 hover:bg-green-600'
+                                        : 'text-red-600 dark:text-red-400 hover:bg-red-600'
+                                }`}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                    )}
+
+                    {/* Expected format hint */}
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                      Expected columns: Name (or First Name + Last Name), ID (or ASU ID/Student ID), Email (optional), Room (optional)
                     </div>
                   </div>
               ) : (
@@ -848,7 +947,10 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
 
               <div className="flex justify-end mt-4">
                 <button
-                    onClick={() => setShowAddResidents(false)}
+                    onClick={() => {
+                      setShowAddResidents(false);
+                      setImportFeedback(null);
+                    }}
                     className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 flex items-center gap-2"
                 >
                   <X className="h-4 w-4" />

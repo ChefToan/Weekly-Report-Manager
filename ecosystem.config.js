@@ -1,7 +1,7 @@
 module.exports = {
   apps: [{
     name: 'weeklyreport',
-    script: 'npm',
+    script: 'pnpm',
     args: 'start',
     cwd: '/home/ubuntu/weekly-report-site/frontend',
     instances: 1,

@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 /* ASU Brand Colors */
 :root {
@@ -69,6 +67,17 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  /* ASU brand colors as Tailwind utilities */
+  --color-asu-maroon: #8C1D40;
+  --color-asu-gold: #FFC627;
+  --color-asu-gray: #747474;
+  --color-maroon-600: #8C1D40;
+  --color-maroon-700: #7A1836;
+
+  /* Custom font stacks */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
 /* Custom ASU brand classes */

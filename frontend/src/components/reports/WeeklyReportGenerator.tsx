@@ -90,6 +90,12 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
   const [allUnsubmittedInteractions, setAllUnsubmittedInteractions] = useState<ReportInteraction[]>([]);
   const [selectedInteractions, setSelectedInteractions] = useState<Set<string>>(new Set());
   const [currentStep, setCurrentStep] = useState<'choose-method' | 'by-week' | 'custom-select'>('choose-method');
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), 5000);
+  };
 
   // Save state changes to localStorage
   useEffect(() => {
@@ -171,7 +177,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         setAllUnsubmittedInteractions(transformedData);
       }
     } catch {
-      console.error('Error fetching unsubmitted interactions');
+      showNotification('error', 'Error fetching unsubmitted interactions');
     }
   };
 
@@ -183,10 +189,10 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         const data = await response.json();
         setReport(data);
       } else {
-        alert('Error generating report');
+        showNotification('error', 'Error generating report');
       }
     } catch {
-      alert('Network error occurred');
+      showNotification('error', 'Network error occurred');
     } finally {
       setLoading(false);
     }
@@ -194,7 +200,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
   const generateCustomReport = async () => {
     if (selectedInteractions.size === 0) {
-      alert('Please select at least one interaction');
+      showNotification('error', 'Please select at least one interaction');
       return;
     }
 
@@ -241,7 +247,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
       setReport(customReport);
     } catch {
-      alert('Error generating custom report');
+      showNotification('error', 'Error generating custom report');
     } finally {
       setLoading(false);
     }
@@ -287,7 +293,10 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       summary: interaction.details
     }));
 
-    const userAsuId = user?.asu_id || '1234567890'; // Fallback if user not available
+    if (!user?.asu_id) {
+      return '// Error: ASU ID not found. Please log out and log back in.';
+    }
+    const userAsuId = user.asu_id;
 
     // Add warning comment if less than 3 interactions available or over the limit
     const warningComment = interactions.length < 3
@@ -761,7 +770,10 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       summary: interaction.details
     }));
 
-    const userAsuId = user?.asu_id || '1234567890'; // Fallback if user not available
+    if (!user?.asu_id) {
+      return '// Error: ASU ID not found. Please log out and log back in.';
+    }
+    const userAsuId = user.asu_id;
 
     return `${warningComment}(function() {
     console.log('🚀 Starting ASU Survey Autofill (Custom Selection)...');
@@ -1212,7 +1224,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       setCopied(type);
       setTimeout(() => setCopied(null), 2000);
     } catch {
-      alert('Failed to copy to clipboard');
+      showNotification('error', 'Failed to copy to clipboard');
     }
   };
 
@@ -1225,7 +1237,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     ].map(interaction => interaction.id).filter(Boolean);
 
     if (allInteractionIds.length === 0) {
-      alert('No interactions to mark as submitted');
+      showNotification('error', 'No interactions to mark as submitted');
       return;
     }
 
@@ -1239,16 +1251,16 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       });
 
       if (response.ok) {
-        alert('Interactions marked as submitted!');
+        showNotification('success', 'Interactions marked as submitted!');
         generateReport(); // Refresh the report
         onInteractionUpdate?.(); // Update the ResidentsGrid
         fetchAllUnsubmittedInteractions(); // Refresh the unsubmitted list
         setSelectedInteractions(new Set()); // Clear selections
       } else {
-        alert('Error marking interactions as submitted');
+        showNotification('error', 'Error marking interactions as submitted');
       }
     } catch {
-      alert('Network error occurred');
+      showNotification('error', 'Network error occurred');
     } finally {
       setSubmitting(false);
     }
@@ -1256,7 +1268,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
   const markSelectedAsSubmitted = async () => {
     if (selectedInteractions.size === 0) {
-      alert('No interactions selected to mark as submitted');
+      showNotification('error', 'No interactions selected to mark as submitted');
       return;
     }
 
@@ -1270,16 +1282,16 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
       });
 
       if (response.ok) {
-        alert(`${selectedInteractions.size} interactions marked as submitted!`);
+        showNotification('success', `${selectedInteractions.size} interactions marked as submitted!`);
         onInteractionUpdate?.(); // Update the ResidentsGrid
         fetchAllUnsubmittedInteractions(); // Refresh the unsubmitted list
         setSelectedInteractions(new Set()); // Clear selections
         setReport(null); // Clear current report
       } else {
-        alert('Error marking interactions as submitted');
+        showNotification('error', 'Error marking interactions as submitted');
       }
     } catch {
-      alert('Network error occurred');
+      showNotification('error', 'Network error occurred');
     } finally {
       setSubmitting(false);
     }
@@ -1296,6 +1308,24 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+      {/* Notification Banner */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-50 max-w-sm px-4 py-3 rounded-lg shadow-lg transition-all ${
+          notification.type === 'success'
+            ? 'bg-green-50 dark:bg-green-900/80 border border-green-200 dark:border-green-700 text-green-800 dark:text-green-200'
+            : 'bg-red-50 dark:bg-red-900/80 border border-red-200 dark:border-red-700 text-red-800 dark:text-red-200'
+        }`}>
+          <div className="flex items-center gap-2">
+            {notification.type === 'success' ? (
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
+            ) : (
+              <span className="flex-shrink-0 text-sm font-medium">!</span>
+            )}
+            <p className="text-sm">{notification.message}</p>
+            <button onClick={() => setNotification(null)} className="ml-auto text-lg leading-none opacity-70 hover:opacity-100">&times;</button>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="text-center">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Weekly Reports</h1>

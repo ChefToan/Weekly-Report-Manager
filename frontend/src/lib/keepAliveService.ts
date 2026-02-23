@@ -1,22 +1,23 @@
 import * as cron from 'node-cron';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { log } from './logger';
 
 // Multiple API sources for reliability
 const API_SOURCES = [
   {
     name: 'Dog CEO',
     url: 'https://dog.ceo/api/breeds/image/random',
-    extractUrl: (data: any) => data.message,
+    extractUrl: (data: Record<string, unknown>) => data.message as string,
   },
   {
     name: 'Random Fox',
     url: 'https://randomfox.ca/floof/',
-    extractUrl: (data: any) => data.image,
+    extractUrl: (data: Record<string, unknown>) => data.image as string,
   },
   {
     name: 'The Cat API',
     url: 'https://api.thecatapi.com/v1/images/search',
-    extractUrl: (data: any) => Array.isArray(data) ? data[0]?.url : null,
+    extractUrl: (data: unknown) => Array.isArray(data) ? (data[0] as Record<string, unknown>)?.url as string : null,
   },
 ];
 
@@ -29,14 +30,14 @@ let cronJob: ReturnType<typeof cron.schedule> | null = null;
 async function fetchImageFromAPIs(): Promise<{ url: string; source: string } | null> {
   for (const source of API_SOURCES) {
     try {
-      console.log(`[Keep-Alive] Attempting to fetch from ${source.name}...`);
+      log.info(`[Keep-Alive] Attempting to fetch from ${source.name}`);
 
       const response = await fetch(source.url, {
-        signal: AbortSignal.timeout(10000), // 10 second timeout
+        signal: AbortSignal.timeout(10000),
       });
 
       if (!response.ok) {
-        console.error(`[Keep-Alive] ${source.name} returned status ${response.status}`);
+        log.warn(`[Keep-Alive] ${source.name} returned status ${response.status}`);
         continue;
       }
 
@@ -44,26 +45,26 @@ async function fetchImageFromAPIs(): Promise<{ url: string; source: string } | n
       const imageUrl = source.extractUrl(data);
 
       if (imageUrl && typeof imageUrl === 'string') {
-        console.log(`[Keep-Alive] Successfully fetched from ${source.name}: ${imageUrl}`);
+        log.info(`[Keep-Alive] Successfully fetched from ${source.name}`, { imageUrl });
         return { url: imageUrl, source: source.name };
       } else {
-        console.error(`[Keep-Alive] ${source.name} returned invalid data`);
+        log.warn(`[Keep-Alive] ${source.name} returned invalid data`);
       }
     } catch (error) {
-      console.error(`[Keep-Alive] Error fetching from ${source.name}:`, error);
+      log.error(`[Keep-Alive] Error fetching from ${source.name}`, { error: String(error) });
     }
   }
 
-  console.error('[Keep-Alive] All API sources failed');
+  log.error('[Keep-Alive] All API sources failed');
   return null;
 }
 
 /**
- * Cleans up old entries (older than 7 days)
+ * Cleans up old photo entries (older than 7 days)
  */
-async function cleanupOldData(supabase: any): Promise<void> {
+async function cleanupOldPhotos(supabase: SupabaseClient): Promise<void> {
   try {
-    const cutoffDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+    const cutoffDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     const { data, error } = await supabase
       .from('refresh_photos')
@@ -72,12 +73,63 @@ async function cleanupOldData(supabase: any): Promise<void> {
       .select();
 
     if (error) {
-      console.error('[Keep-Alive] Error cleaning up old data:', error);
+      log.error('[Keep-Alive] Error cleaning up old photos', { error: error.message });
     } else if (data && data.length > 0) {
-      console.log(`[Keep-Alive] Cleaned up ${data.length} old entries`);
+      log.info(`[Keep-Alive] Cleaned up ${data.length} old photo entries`);
     }
   } catch (error) {
-    console.error('[Keep-Alive] Cleanup error:', error);
+    log.error('[Keep-Alive] Photo cleanup error', { error: String(error) });
+  }
+}
+
+/**
+ * Cleans up expired sessions and used/expired password reset tokens
+ */
+async function cleanupExpiredAuth(supabase: SupabaseClient): Promise<void> {
+  const now = new Date().toISOString();
+
+  try {
+    // Delete expired sessions
+    const { data: expiredSessions, error: sessionError } = await supabase
+      .from('user_sessions')
+      .delete()
+      .lt('expires_at', now)
+      .select('id');
+
+    if (sessionError) {
+      log.error('[Keep-Alive] Error cleaning up expired sessions', { error: sessionError.message });
+    } else if (expiredSessions && expiredSessions.length > 0) {
+      log.info(`[Keep-Alive] Cleaned up ${expiredSessions.length} expired sessions`);
+    }
+
+    // Delete used or expired password reset tokens
+    const { data: expiredTokens, error: tokenError } = await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .or(`used.eq.true,expires_at.lt.${now}`)
+      .select('id');
+
+    if (tokenError) {
+      log.error('[Keep-Alive] Error cleaning up expired tokens', { error: tokenError.message });
+    } else if (expiredTokens && expiredTokens.length > 0) {
+      log.info(`[Keep-Alive] Cleaned up ${expiredTokens.length} expired/used reset tokens`);
+    }
+
+    // Delete expired and unused registration codes
+    const { data: expiredCodes, error: codeError } = await supabase
+      .from('registration_codes')
+      .delete()
+      .eq('is_used', false)
+      .lt('expires_at', now)
+      .select('id');
+
+    if (codeError) {
+      log.error('[Keep-Alive] Error cleaning up expired registration codes', { error: codeError.message });
+    } else if (expiredCodes && expiredCodes.length > 0) {
+      log.info(`[Keep-Alive] Cleaned up ${expiredCodes.length} expired registration codes`);
+    }
+  } catch (error) {
+    log.error('[Keep-Alive] Auth cleanup error', { error: String(error) });
   }
 }
 
@@ -86,22 +138,20 @@ async function cleanupOldData(supabase: any): Promise<void> {
  */
 async function keepDatabaseActive(): Promise<void> {
   if (isRunning) {
-    console.log('[Keep-Alive] Skipping - already running');
+    log.info('[Keep-Alive] Skipping - already running');
     return;
   }
 
-  // Check if required environment variables are set
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.error('[Keep-Alive] Missing required environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in frontend/.env');
+    log.error('[Keep-Alive] Missing required environment variables');
     return;
   }
 
   isRunning = true;
   const startTime = Date.now();
-  console.log(`[Keep-Alive] Starting keep-alive process at ${new Date().toISOString()}`);
+  log.info('[Keep-Alive] Starting keep-alive process');
 
   try {
-    // Initialize Supabase client
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -113,7 +163,10 @@ async function keepDatabaseActive(): Promise<void> {
       }
     );
 
-    // Check last fetch time
+    // Always run auth cleanup
+    await cleanupExpiredAuth(supabase);
+
+    // Check last fetch time for photo keep-alive
     const { data: lastPhoto } = await supabase
       .from('refresh_photos')
       .select('fetched_at')
@@ -127,11 +180,11 @@ async function keepDatabaseActive(): Promise<void> {
       ? (now.getTime() - lastFetchTime.getTime()) / (1000 * 60 * 60)
       : 25;
 
-    console.log(`[Keep-Alive] Hours since last fetch: ${hoursSinceLastFetch.toFixed(2)}`);
+    log.info(`[Keep-Alive] Hours since last photo fetch: ${hoursSinceLastFetch.toFixed(2)}`);
 
-    // Only fetch if it's been more than 24 hours
+    // Only fetch a new photo if it's been more than 24 hours
     if (hoursSinceLastFetch < 24) {
-      console.log(`[Keep-Alive] Skipping - last fetch was ${hoursSinceLastFetch.toFixed(2)} hours ago`);
+      log.info(`[Keep-Alive] Skipping photo fetch - last fetch was ${hoursSinceLastFetch.toFixed(2)} hours ago`);
       isRunning = false;
       return;
     }
@@ -140,13 +193,13 @@ async function keepDatabaseActive(): Promise<void> {
     const result = await fetchImageFromAPIs();
 
     if (!result) {
-      console.error('[Keep-Alive] Failed to fetch image from all sources');
+      log.error('[Keep-Alive] Failed to fetch image from all sources');
       isRunning = false;
       return;
     }
 
-    // Clean up old data first
-    await cleanupOldData(supabase);
+    // Clean up old photos first
+    await cleanupOldPhotos(supabase);
 
     // Insert new photo
     const { error: insertError } = await supabase
@@ -159,23 +212,16 @@ async function keepDatabaseActive(): Promise<void> {
       .select();
 
     if (insertError) {
-      console.error('[Keep-Alive] Error inserting data:', insertError);
+      log.error('[Keep-Alive] Error inserting photo data', { error: insertError.message });
     } else {
-      console.log(`[Keep-Alive] Successfully saved new image from ${result.source} to database`);
-
-      // Verify database count
-      const { count } = await supabase
-        .from('refresh_photos')
-        .select('*', { count: 'exact', head: true });
-
-      console.log(`[Keep-Alive] Total entries in database: ${count}`);
+      log.info(`[Keep-Alive] Successfully saved new image from ${result.source}`);
     }
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`[Keep-Alive] Completed in ${duration}s`);
+    log.info(`[Keep-Alive] Completed in ${duration}s`);
 
   } catch (error) {
-    console.error('[Keep-Alive] Fatal error:', error);
+    log.error('[Keep-Alive] Fatal error', { error: String(error) });
   } finally {
     isRunning = false;
   }
@@ -186,43 +232,31 @@ async function keepDatabaseActive(): Promise<void> {
  */
 export function startKeepAlive(): void {
   if (cronJob) {
-    console.log('[Keep-Alive] Cron job already running');
+    log.info('[Keep-Alive] Cron job already running');
     return;
   }
 
-  // Run immediately on startup
-  console.log('[Keep-Alive] Starting keep-alive service...');
-  keepDatabaseActive().catch(console.error);
+  log.info('[Keep-Alive] Starting keep-alive service');
+  keepDatabaseActive().catch((err) => log.error('[Keep-Alive] Initial run error', { error: String(err) }));
 
   // Schedule to run every 24 hours at 12:00 AM Arizona Time
-  // Format: second minute hour day month weekday
   cronJob = cron.schedule('0 0 0 * * *', () => {
-    console.log('[Keep-Alive] Scheduled execution triggered');
-    keepDatabaseActive().catch(console.error);
+    log.info('[Keep-Alive] Scheduled execution triggered');
+    keepDatabaseActive().catch((err) => log.error('[Keep-Alive] Scheduled run error', { error: String(err) }));
   }, {
-    timezone: "America/Phoenix" // Arizona Time (no DST)
+    timezone: "America/Phoenix"
   });
 
-  console.log('[Keep-Alive] Cron job scheduled - will run daily at 12:00 AM Arizona Time');
+  log.info('[Keep-Alive] Cron job scheduled - will run daily at 12:00 AM Arizona Time');
 }
 
 /**
  * Stops the cron job
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function stopKeepAlive(): void {
   if (cronJob) {
     cronJob.stop();
     cronJob = null;
-    console.log('[Keep-Alive] Cron job stopped');
+    log.info('[Keep-Alive] Cron job stopped');
   }
-}
-
-/**
- * Force run the keep-alive process (for testing)
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function forceRun(): Promise<void> {
-  console.log('[Keep-Alive] Force running keep-alive...');
-  return keepDatabaseActive();
 }

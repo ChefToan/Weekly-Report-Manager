@@ -12,16 +12,6 @@ const nextConfig: NextConfig = {
   // Fix: Move serverComponentsExternalPackages from experimental to serverExternalPackages
   serverExternalPackages: ['bcryptjs'],
   
-  // Disable ESLint during builds to prevent blocking deployment
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  
-  // Disable TypeScript errors during builds for faster deployment
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  
   async headers() {
     return [
       {
@@ -36,12 +26,8 @@ const nextConfig: NextConfig = {
             value: 'DENY',
           },
           {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
-          },
-          {
             key: 'Strict-Transport-Security',
-            value: 'max-age=31536000; includeSubDomains',
+            value: 'max-age=31536000; includeSubDomains; preload',
           },
         ],
       },

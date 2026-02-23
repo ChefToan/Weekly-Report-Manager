@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { log } from '@/lib/logger';
 
 export async function GET() {
   try {
@@ -60,7 +61,7 @@ export async function GET() {
 
     return NextResponse.json({ user });
   } catch (error) {
-    console.error('Authentication check error:', error);
+    log.error('Authentication check error:', { error: String(error) });
     return NextResponse.json({ error: 'Authentication check failed' }, { status: 500 });
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { log } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,15 +41,33 @@ export async function POST(request: NextRequest) {
 
     // Generate secure reset token
     const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
 
-    // For development mode, we'll temporarily store the token in a simple way
-    // In production, you should use a proper database table for this
+    // Invalidate any existing reset tokens for this user
+    await supabase
+      .from('password_reset_tokens')
+      .update({ used: true })
+      .eq('user_id', user.id)
+      .eq('used', false);
 
-    // Send email with reset link (include email for easier lookup until DB is fixed)
+    // Store hashed token in the database
+    const { error: tokenError } = await supabase
+      .from('password_reset_tokens')
+      .insert({
+        user_id: user.id,
+        token: tokenHash,
+        expires_at: expiresAt.toISOString(),
+      });
+
+    if (tokenError) {
+      log.error('Error storing reset token:', { error: String(tokenError) });
+      return NextResponse.json({ error: 'Failed to process reset request' }, { status: 500 });
+    }
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     if (!appUrl) {
-      console.error('NEXT_PUBLIC_APP_URL environment variable is not set');
+      log.error('NEXT_PUBLIC_APP_URL environment variable is not set');
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
     }
     const resetUrl = `${appUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
@@ -57,13 +76,13 @@ export async function POST(request: NextRequest) {
     try {
       await sendResetEmail(user.email, user.first_name, resetUrl);
     } catch (emailError) {
-      console.error('Error sending reset email:', emailError);
+      log.error('Error sending reset email:', { error: String(emailError) });
       // Still return success to prevent revealing system issues
     }
 
     return NextResponse.json({ success: true, message: successMessage });
   } catch (error) {
-    console.error('Password reset error:', error);
+    log.error('Password reset error:', { error: String(error) });
     return NextResponse.json({ error: 'Failed to process reset request' }, { status: 500 });
   }
 }

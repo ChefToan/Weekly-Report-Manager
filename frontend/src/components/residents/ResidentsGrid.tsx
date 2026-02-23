@@ -2,7 +2,7 @@
 // Updated: Grid width fixes applied - v3.0 with improved interaction cell layout
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Copy, UserPlus, Trash2, X, Edit2, Check } from 'lucide-react';
+import { Plus, Copy, UserPlus, Trash2, X, Edit2 } from 'lucide-react';
 import { sortResidentsByRoom } from '@/utils/roomSorting';
 import {
   useFloating,
@@ -304,6 +304,12 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
     date: getLocalDateString()
   });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), 5000);
+  };
 
   const toggleCellExpansion = (cellId: string) => {
     const newExpanded = new Set(expandedCells);
@@ -323,7 +329,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      console.error('Failed to copy');
+      // clipboard copy failed silently
     }
   };
 
@@ -332,7 +338,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
     if (selectedFile && selectedFile.type === 'text/csv') {
       setImportFile(selectedFile);
     } else {
-      alert('Please select a CSV file');
+      showNotification('error', 'Please select a CSV file');
     }
   };
 
@@ -402,7 +408,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
 
   const handleManualAdd = async () => {
     if (!manualResident.name.trim() || !manualResident.empl_id.trim() || !manualResident.room.trim()) {
-      alert('Please enter name, student ID, and room number');
+      showNotification('error', 'Please enter name, student ID, and room number');
       return;
     }
 
@@ -427,10 +433,10 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         setShowAddResidents(false);
       } else {
         const data = await response.json();
-        alert('Failed to add resident: ' + (data.error || 'Unknown error'));
+        showNotification('error', 'Failed to add resident: ' + (data.error || 'Unknown error'));
       }
     } catch {
-      alert('Network error occurred');
+      showNotification('error', 'Network error occurred');
     } finally {
       setImporting(false);
     }
@@ -438,7 +444,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
 
   const handleRemoveSelected = async () => {
     if (selectedResidents.size === 0) {
-      alert('Please select residents to remove');
+      showNotification('error', 'Please select residents to remove');
       return;
     }
 
@@ -463,15 +469,11 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         throw new Error(errorData.error || 'Failed to delete residents');
       }
 
-      const result = await response.json();
-      console.log(`Successfully deleted ${result.deletedIds?.length || selectedResidents.size} residents`);
-
       await fetchResidents();
       onInteractionUpdate?.();
       setSelectedResidents(new Set());
     } catch (error) {
-      console.error('Error removing residents:', error);
-      alert(`Error removing residents: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      showNotification('error', `Error removing residents: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setRemovingResidents(false);
     }
@@ -517,10 +519,10 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         const sortedResidents = sortResidentsByRoom(data || []);
         setResidents(sortedResidents);
       } else {
-        console.error("Error occurred");
+        // error handled via notification
       }
     } catch {
-      console.error("Error occurred");
+      // error handled via notification
     } finally {
       setLoading(false);
     }
@@ -541,7 +543,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         setInteractions(groupedInteractions);
       }
     } catch {
-      console.error("Error occurred");
+      // error handled via notification
     }
   };
 
@@ -585,14 +587,10 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
         await fetchInteractions();
         onInteractionUpdate?.();
       } else {
-        const responseText = await response.text();
-        console.error('Failed to delete interaction. Status:', response.status);
-        console.error('Response text:', responseText);
-        alert('Failed to delete interaction. Please try again.');
+        showNotification('error', 'Failed to delete interaction. Please try again.');
       }
     } catch {
-      console.error("Error occurred");
-      alert('Error occurred while deleting interaction. Please try again.');
+      showNotification('error', 'Error occurred while deleting interaction. Please try again.');
     } finally {
       setDeletingInteraction(null);
     }
@@ -633,15 +631,13 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
           date: getLocalDateString()
         });
         if (markAsSubmitted) {
-          alert('Interaction updated and marked as submitted!');
+          showNotification('success', 'Interaction updated and marked as submitted!');
         }
       } else {
-        const responseText = await response.text();
-        console.error('Failed to update interaction. Status:', response.status);
-        console.error('Response text:', responseText);
+        showNotification('error', 'Failed to update interaction. Please try again.');
       }
     } catch {
-      console.error("Error occurred");
+      showNotification('error', 'Error occurred while updating interaction.');
     } finally {
       setAddingInteraction(false);
     }
@@ -655,10 +651,7 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
 
     try {
       const resident = residents.find(r => r.id === showPopover.residentId);
-      if (!resident) {
-        console.error('Resident not found');
-        return;
-      }
+      if (!resident) return;
 
       const selectedDate = new Date(interactionFormData.date);
       const dayOfWeek = selectedDate.getDay();
@@ -692,12 +685,10 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
           date: getLocalDateString()
         });
       } else {
-        const responseText = await response.text();
-        console.error('Failed to add interaction. Status:', response.status);
-        console.error('Response text:', responseText);
+        showNotification('error', 'Failed to add interaction. Please try again.');
       }
     } catch {
-      console.error("Error occurred");
+      // error handled via notification
     } finally {
       setAddingToCell(null);
     }
@@ -737,7 +728,20 @@ export default function ResidentsGrid({ onInteractionUpdate }: ResidentsGridProp
   }
 
   return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 relative">
+        {/* Notification Banner */}
+        {notification && (
+          <div className={`absolute top-2 right-2 z-50 max-w-sm px-4 py-3 rounded-lg shadow-lg ${
+            notification.type === 'success'
+              ? 'bg-green-50 dark:bg-green-900/80 border border-green-200 dark:border-green-700 text-green-800 dark:text-green-200'
+              : 'bg-red-50 dark:bg-red-900/80 border border-red-200 dark:border-red-700 text-red-800 dark:text-red-200'
+          }`}>
+            <div className="flex items-center gap-2">
+              <p className="text-sm">{notification.message}</p>
+              <button onClick={() => setNotification(null)} className="ml-auto text-lg leading-none opacity-70 hover:opacity-100">&times;</button>
+            </div>
+          </div>
+        )}
         <div className="p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Residents interaction tracker</h2>
           <div className="flex gap-2">

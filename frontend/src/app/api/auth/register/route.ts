@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
+import { log } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -122,7 +123,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (userError) {
-      console.error('Error creating user:', userError);
+      log.error('Error creating user:', { error: userError.message });
       return NextResponse.json({ error: 'Failed to create user account' }, { status: 500 });
     }
 
@@ -136,7 +137,7 @@ export async function POST(request: NextRequest) {
       .eq('id', regCode.id);
 
     if (updateCodeError) {
-      console.error('Error updating registration code:', updateCodeError);
+      log.error('Error updating registration code:', { error: updateCodeError.message });
       // User is created, so we don't fail the registration
     }
 
@@ -155,7 +156,7 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    log.error('Registration error:', { error: String(error) });
     return NextResponse.json({ error: 'Registration failed' }, { status: 500 });
   }
 }

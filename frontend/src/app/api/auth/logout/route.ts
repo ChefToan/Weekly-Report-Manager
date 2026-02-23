@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { log } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('Logout error:', error);
+    log.error('Logout error:', { error: String(error) });
     const response = NextResponse.json({ success: true }); // Always succeed for logout
     response.cookies.delete('session_token');
     return response;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getCurrentUser } from '@/utils/auth';
+import { log } from '@/lib/logger';
 
 export async function DELETE(
   request: NextRequest,
@@ -27,7 +28,7 @@ export async function DELETE(
       .eq('user_id', currentUser.id);
 
     if (interactionsError) {
-      console.error('Error deleting interactions:', interactionsError);
+      log.error('Error deleting interactions:', { error: String(interactionsError) });
     }
 
     // Delete the resident only if it belongs to the current user

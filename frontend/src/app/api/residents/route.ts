@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getCurrentUser } from '@/utils/auth';
+import { log } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -97,7 +98,7 @@ export async function DELETE(request: NextRequest) {
       .eq('user_id', currentUser.id);
 
     if (interactionsError) {
-      console.error('Error deleting interactions:', interactionsError);
+      log.error('Error deleting interactions:', { error: String(interactionsError) });
       // Continue with residents deletion even if interactions fail
     }
 
@@ -119,7 +120,7 @@ export async function DELETE(request: NextRequest) {
       deletedIds: (data || []).map(r => r.id)
     });
   } catch (error) {
-    console.error('Batch delete error:', error);
+    log.error('Batch delete error:', { error: String(error) });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

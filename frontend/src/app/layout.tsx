@@ -22,7 +22,7 @@ export default function RootLayout({
       >
         {/* Privacy-friendly analytics by Plausible */}
         <Script
-          src="https://plausible.io/js/pa-EPd07XtOKJ5uZRfpkSURX.js"
+          {...{ src: "https://plausible.io/js/pa-EPd07XtOKJ5uZRfpkSURX.js" } as Record<string, string>}
           strategy="afterInteractive"
         />
         <Script id="plausible-init" strategy="afterInteractive">

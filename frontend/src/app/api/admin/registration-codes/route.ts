@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import crypto from 'crypto';
+import { log } from '@/lib/logger';
 
 // Helper function to validate admin access
 async function validateAdminAccess() {
@@ -47,9 +49,9 @@ async function validateAdminAccess() {
   return { user, supabase };
 }
 
-// Generate random code
+// Generate cryptographically secure registration code
 function generateRegistrationCode(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return crypto.randomBytes(16).toString('hex');
 }
 
 // GET - List all registration codes
@@ -80,13 +82,13 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching registration codes:', error);
+      log.error('Error fetching registration codes:', { error: String(error) });
       return NextResponse.json({ error: 'Failed to fetch registration codes' }, { status: 500 });
     }
 
     return NextResponse.json({ codes });
   } catch (error) {
-    console.error('Registration codes GET error:', error);
+    log.error('Registration codes GET error:', { error: String(error) });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -145,13 +147,13 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
-      console.error('Error creating registration code:', insertError);
+      log.error('Error creating registration code:', { error: String(insertError) });
       return NextResponse.json({ error: 'Failed to create registration code' }, { status: 500 });
     }
 
     return NextResponse.json({ code: newCode });
   } catch (error) {
-    console.error('Registration code POST error:', error);
+    log.error('Registration code POST error:', { error: String(error) });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -178,13 +180,13 @@ export async function DELETE(request: NextRequest) {
       .eq('id', codeId);
 
     if (error) {
-      console.error('Error deleting registration code:', error);
+      log.error('Error deleting registration code:', { error: String(error) });
       return NextResponse.json({ error: 'Failed to delete registration code' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Registration code DELETE error:', error);
+    log.error('Registration code DELETE error:', { error: String(error) });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

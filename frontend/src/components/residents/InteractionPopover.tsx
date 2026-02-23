@@ -19,9 +19,9 @@ interface InteractionFormData {
 
 interface InteractionPopoverProps {
   // Floating UI props
-  floatingRefs: any;
-  floatingStyles: any;
-  getFloatingProps: () => any;
+  floatingRefs: { setFloating: (node: HTMLElement | null) => void };
+  floatingStyles: React.CSSProperties;
+  getFloatingProps: () => Record<string, unknown>;
   
   // Mode and data
   mode: 'add' | 'edit';

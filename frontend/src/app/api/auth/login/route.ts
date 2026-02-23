@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
+import { log } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
     
 
     if (!supabaseUrl || !serviceKey) {
-      console.error('Missing required environment variables');
+      log.error('Missing required environment variables');
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
     }
 
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('Login error:', error);
+    log.error('Login error:', { error: String(error) });
     return NextResponse.json({ error: 'Login failed' }, { status: 500 });
   }
 }

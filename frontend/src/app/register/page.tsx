@@ -214,9 +214,7 @@ export default function RegisterPage() {
             <h1 className="text-3xl font-bold text-white mb-2">
               Create Your Account
             </h1>
-            <p className="text-blue-100">
-              Join the Community Assistant weekly reporting system with your ASU credentials
-            </p>
+
           </div>
 
           <div className="p-8">

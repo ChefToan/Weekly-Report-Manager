@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build && cp -r .next/static .next/standalone/frontend/.next/static && cp -r public .next/standalone/frontend/public",
+    "build": "next build && cp -r .next/static .next/standalone/frontend/.next/static && if [ -d public ]; then cp -r public .next/standalone/frontend/public; fi",
     "start": "node .next/standalone/frontend/server.js",
     "lint": "eslint",
     "type-check": "tsc --noEmit"

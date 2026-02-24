@@ -300,13 +300,13 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
     // Add warning comment if less than 3 interactions available or over the limit
     const warningComment = interactions.length < 3
-      ? `// ⚠️ WARNING: Only ${interactions.length} interaction${interactions.length === 1 ? '' : 's'} available for this week. Weekly reports typically require at least 3 interactions.\n// Consider adding more interactions or selecting a different week.\n\n`
+      ? `// WARNING: Only ${interactions.length} interaction${interactions.length === 1 ? '' : 's'} available for this week. Weekly reports typically require at least 3 interactions.\n// Consider adding more interactions or selecting a different week.\n\n`
       : interactions.length > MAX_INTERACTIONS
-      ? `// ⚠️ NOTE: ${interactions.length} interactions found, but only ${MAX_INTERACTIONS} will be used (maximum per report).\n\n`
+      ? `// NOTE: ${interactions.length} interactions found, but only ${MAX_INTERACTIONS} will be used (maximum per report).\n\n`
       : '';
 
     return `${warningComment}(function() {
-    console.log('🚀 Starting ASU Survey Autofill...');
+    console.log('Starting ASU Survey Autofill...');
     
     // Generated interaction data  
     const interactions = ${JSON.stringify(interactions, null, 8)};
@@ -330,21 +330,21 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         if (isProcessing) return;
         isProcessing = true;
 
-        console.log('📝 Filling Page 1...');
+        // console.log('Filling Page 1...');
         const asuIdField = document.querySelector('input[name="t_834450353"]');
         if (fillField(asuIdField, '${userAsuId}')) {
-            console.log('✅ Filled ASU ID');
+            // console.log('Filled ASU ID');
 
             setTimeout(() => {
                 const startBtn = document.querySelector('#SurveySubmitButtonElement');
                 if (startBtn) {
-                    console.log('🎯 Clicking Start button...');
+                    // console.log('Clicking Start button...');
                     startBtn.click();
                     monitorForPage2();
                 }
             }, 1000);
         } else {
-            console.log('❌ ASU ID field not found');
+            console.log('Error: ASU ID field not found');
             isProcessing = false;
         }
     }
@@ -356,10 +356,10 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
         const checkForPage2 = () => {
             attempts++;
-            console.log(\`🔍 Checking for Page 2... (attempt \${attempts})\`);
+            // console.log(\`Checking for Page 2... (attempt \${attempts})\`);
 
             if (document.querySelector('input[name="t_834450357"]')) {
-                console.log('📍 Page 2 detected! Starting autofill...');
+                console.log('Page 2 detected. Starting autofill...');
                 isProcessing = false;
                 setTimeout(() => fillPage2(), 1500);
                 return;
@@ -368,7 +368,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             if (attempts < maxAttempts) {
                 setTimeout(checkForPage2, 1000);
             } else {
-                console.log('❌ Page 2 not detected after maximum attempts');
+                console.log('Error: Page 2 not detected after maximum attempts');
                 isProcessing = false;
             }
         };
@@ -381,7 +381,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         if (isProcessing) return;
         isProcessing = true;
 
-        console.log('📝 Filling Page 2 interactions...');
+        // console.log('Filling Page 2 interactions...');
 
         // Fill required interactions (first 3)
         const requiredFields = [
@@ -390,13 +390,13 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             { idField: 't_834450361', summaryField: 't_834450362' }
         ];
 
-        console.log('📝 Filling required interactions...');
+        // console.log('Filling required interactions...');
         for (let i = 0; i < 3 && i < interactions.length; i++) {
             const idField = document.querySelector(\`input[name="\${requiredFields[i].idField}"]\`);
             const summaryField = document.querySelector(\`input[name="\${requiredFields[i].summaryField}"]\`);
 
             if (fillField(idField, interactions[i].id) && fillField(summaryField, interactions[i].summary)) {
-                console.log(\`✅ Filled required interaction \${i + 1}\`);
+                // console.log(\`Filled required interaction \${i + 1}\`);
             }
         }
 
@@ -424,7 +424,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             { idField: 't_834450401', summaryField: 't_834450402' }
         ];
         
-        console.log('📝 Filling additional interactions...');
+        // console.log('Filling additional interactions...');
         const remainingInteractions = interactions.slice(3);
         const maxAdditional = Math.min(remainingInteractions.length, 20);
         
@@ -433,7 +433,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             const summaryField = document.querySelector(\`input[name="\${additionalFields[i].summaryField}"]\`);
             
             if (fillField(idField, remainingInteractions[i].id) && fillField(summaryField, remainingInteractions[i].summary)) {
-                console.log(\`✅ Filled additional interaction \${i + 1}\`);
+                // console.log(\`Filled additional interaction \${i + 1}\`);
             }
         }
         
@@ -446,16 +446,16 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     // Function to handle radio selection and submit
     function handleRadioAndSubmit() {
         try {
-            console.log('📝 Handling radio selection...');
+            // console.log('Handling radio selection...');
 
             // Calculate if we need more interactions
             const totalFilled = Math.min(interactions.length, 23); // 3 required + 20 additional max on page 2
             const needsMore = interactions.length > 23;
 
-            console.log(\`📊 Total interactions: \${interactions.length}\`);
-            console.log(\`📊 Filled on page 2: \${totalFilled}\`);
-            console.log(\`📊 Remaining: \${Math.max(0, interactions.length - 23)}\`);
-            console.log(\`📊 Needs more pages: \${needsMore}\`);
+            console.log(\`Total interactions: \${interactions.length}\`);
+            // console.log(\`Filled on page 2: \${totalFilled}\`);
+            // console.log(\`Remaining: \${Math.max(0, interactions.length - 23)}\`);
+            // console.log(\`Needs more pages: \${needsMore}\`);
 
             // Use getElementById for IDs that start with numbers
             const radioYes = document.getElementById('834450403ID');
@@ -464,18 +464,18 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             if (needsMore && radioYes) {
                 radioYes.checked = true;
                 radioYes.dispatchEvent(new Event('change', { bubbles: true }));
-                console.log('✅ Selected "Yes" for more interactions');
+                // console.log('Selected "Yes" for more interactions');
             } else if (!needsMore && radioNo) {
                 radioNo.checked = true;
                 radioNo.dispatchEvent(new Event('change', { bubbles: true }));
-                console.log('✅ Selected "No" - all interactions fit on page 2');
+                // console.log('Selected "No" - all interactions fit on page 2');
             }
 
             // Click Next button
             setTimeout(() => {
                 const nextBtn = document.querySelector('#SurveySubmitButtonElement');
                 if (nextBtn) {
-                    console.log('🎯 Clicking Next button...');
+                    // console.log('Clicking Next button...');
                     nextBtn.click();
 
                     // Monitor for popup or next page
@@ -486,7 +486,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             }, 1000);
 
         } catch (error) {
-            console.error('❌ Error handling radio and submit:', error);
+            console.error('Error handling radio and submit:', error);
             isProcessing = false;
         }
     }
@@ -498,7 +498,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
         const checkStatus = () => {
             attempts++;
-            console.log(\`🔍 Checking for popup or next page... (attempt \${attempts})\`);
+            // console.log(\`Checking for popup or next page... (attempt \${attempts})\`);
 
             // Check for "Response Requested" dialog
             const dialogButtons = document.querySelectorAll('.modal-content .btn-modal-secondary');
@@ -512,7 +512,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             }
 
             if (continueBtn && continueBtn.offsetParent !== null) {
-                console.log('⚠️ "Response Requested" dialog detected - clicking "Continue Without Answering"...');
+                console.log('"Response Requested" dialog detected - dismissing...');
                 continueBtn.click();
 
                 // After clicking continue, check what happens next
@@ -520,7 +520,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
                     if (expectPage3) {
                         monitorForPage3();
                     } else {
-                        console.log('✅ Navigating to page 4 (final page)');
+                        console.log('Navigating to page 4');
                         isProcessing = false;
                     }
                 }, 2000);
@@ -529,7 +529,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
             // Check if we're already on page 3
             if (expectPage3 && document.querySelector('input[name="t_834450405"]')) {
-                console.log('📍 Page 3 detected! Starting autofill...');
+                console.log('Page 3 detected. Starting autofill...');
                 isProcessing = false;
                 setTimeout(() => fillPage3(), 1500);
                 return;
@@ -537,8 +537,8 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
             // Check if we're on page 4 or beyond (no more interactions)
             if (!expectPage3 && !document.querySelector('input[name="t_834450357"]')) {
-                console.log('✅ Successfully navigated to page 4!');
-                console.log(\`📊 Total interactions processed: \${interactions.length}\`);
+                console.log('Successfully navigated to page 4');
+                console.log(\`Total interactions processed: \${interactions.length}\`);
                 isProcessing = false;
                 return;
             }
@@ -546,7 +546,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             if (attempts < maxAttempts) {
                 setTimeout(checkStatus, 1000);
             } else {
-                console.log('❌ Maximum attempts reached. Please check the page manually.');
+                console.log('Error: Maximum attempts reached. Check page manually.');
                 isProcessing = false;
             }
         };
@@ -561,10 +561,10 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
         const checkForPage3 = () => {
             attempts++;
-            console.log(\`🔍 Checking for Page 3... (attempt \${attempts})\`);
+            // console.log(\`Checking for Page 3... (attempt \${attempts})\`);
 
             if (document.querySelector('input[name="t_834450405"]')) {
-                console.log('📍 Page 3 detected! Starting autofill...');
+                console.log('Page 3 detected. Starting autofill...');
                 isProcessing = false;
                 setTimeout(() => fillPage3(), 1500);
                 return;
@@ -573,7 +573,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             if (attempts < maxAttempts) {
                 setTimeout(checkForPage3, 1000);
             } else {
-                console.log('❌ Page 3 not detected after maximum attempts');
+                console.log('Error: Page 3 not detected after maximum attempts');
                 isProcessing = false;
             }
         };
@@ -586,7 +586,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         if (isProcessing) return;
         isProcessing = true;
 
-        console.log('📝 Filling Page 3 interactions...');
+        // console.log('Filling Page 3 interactions...');
 
         // Page 3 has interactions 21-40 (20 more slots)
         const page3Fields = [
@@ -616,14 +616,14 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         const page3Interactions = interactions.slice(23);
         const maxPage3 = Math.min(page3Interactions.length, 20);
 
-        console.log(\`📝 Filling \${maxPage3} interactions on page 3...\`);
+        // console.log(\`Filling \${maxPage3} interactions on page 3...\`);
 
         for (let i = 0; i < maxPage3; i++) {
             const idField = document.querySelector(\`input[name="\${page3Fields[i].idField}"]\`);
             const summaryField = document.querySelector(\`input[name="\${page3Fields[i].summaryField}"]\`);
 
             if (fillField(idField, page3Interactions[i].id) && fillField(summaryField, page3Interactions[i].summary)) {
-                console.log(\`✅ Filled interaction \${23 + i + 1}\`);
+                // console.log(\`Filled interaction \${23 + i + 1}\`);
             }
         }
 
@@ -636,11 +636,11 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     // Function to handle Page 3 submit
     function handlePage3Submit() {
         try {
-            console.log('📝 Submitting Page 3...');
+            // console.log('Submitting Page 3...');
 
             const nextBtn = document.querySelector('#SurveySubmitButtonElement');
             if (nextBtn) {
-                console.log('🎯 Clicking Next button on Page 3...');
+                // console.log('Clicking Next button on Page 3...');
                 nextBtn.click();
 
                 // Monitor for popup again on page 3
@@ -649,7 +649,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
                 }, 2000);
             }
         } catch (error) {
-            console.error('❌ Error submitting Page 3:', error);
+            console.error('Error submitting Page 3:', error);
             isProcessing = false;
         }
     }
@@ -661,7 +661,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
         const checkStatus = () => {
             attempts++;
-            console.log(\`🔍 Checking for Page 3 popup or final page... (attempt \${attempts})\`);
+            // console.log(\`Checking for Page 3 popup or final page... (attempt \${attempts})\`);
 
             // Check for "Response Requested" dialog
             const dialogButtons = document.querySelectorAll('.modal-content .btn-modal-secondary');
@@ -675,7 +675,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             }
 
             if (continueBtn && continueBtn.offsetParent !== null) {
-                console.log('⚠️ "Response Requested" dialog detected on Page 3 - clicking "Continue Without Answering"...');
+                console.log('"Response Requested" dialog on page 3 - dismissing...');
                 continueBtn.click();
 
                 setTimeout(() => {
@@ -688,8 +688,8 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
             // Check if we're already on page 4 or beyond
             if (!document.querySelector('input[name="t_834450405"]') && !document.querySelector('input[name="t_834450357"]')) {
-                console.log('✅ Successfully navigated to page 4!');
-                console.log(\`📊 Total interactions processed: \${interactions.length}\`);
+                console.log('Successfully navigated to page 4');
+                console.log(\`Total interactions processed: \${interactions.length}\`);
                 isProcessing = false;
                 return;
             }
@@ -697,7 +697,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             if (attempts < maxAttempts) {
                 setTimeout(checkStatus, 1000);
             } else {
-                console.log('❌ Maximum attempts reached. Please check the page manually.');
+                console.log('Error: Maximum attempts reached. Check page manually.');
                 isProcessing = false;
             }
         };
@@ -721,30 +721,30 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     // Start the autofill process
     function startAutofill() {
         const currentPage = detectCurrentPage();
-        console.log('🔍 Detecting current page...');
+        // console.log('Detecting current page...');
 
         switch(currentPage) {
             case 'page1':
-                console.log('📍 Detected Page 1');
+                console.log('Detected Page 1');
                 fillPage1();
                 break;
             case 'page2':
-                console.log('📍 Detected Page 2');
+                console.log('Detected Page 2');
                 fillPage2();
                 break;
             case 'page3':
-                console.log('📍 Detected Page 3');
+                console.log('Detected Page 3');
                 fillPage3();
                 break;
             default:
-                console.log('📍 Page not recognized or already completed');
+                console.log('Page not recognized or already completed');
                 break;
         }
     }
     
     // Initialize
     startAutofill();
-    console.log(\`✅ Autofill script initialized! Total interactions: \${interactions.length}\`);
+    console.log(\`Autofill initialized. Total interactions: \${interactions.length}\`);
 })();`;
   };
 
@@ -760,9 +760,9 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
     // Add warning comment if less than 3 interactions selected
     const warningComment = selectedInteractionsList.length < 3
-      ? `// ⚠️ WARNING: Only ${selectedInteractionsList.length} interaction${selectedInteractionsList.length === 1 ? '' : 's'} selected. Weekly reports typically require at least 3 interactions.\n// Consider adding ${3 - selectedInteractionsList.length} more interaction${3 - selectedInteractionsList.length === 1 ? '' : 's'} for a complete report.\n\n`
+      ? `// WARNING: Only ${selectedInteractionsList.length} interaction${selectedInteractionsList.length === 1 ? '' : 's'} selected. Weekly reports typically require at least 3 interactions.\n// Consider adding ${3 - selectedInteractionsList.length} more interaction${3 - selectedInteractionsList.length === 1 ? '' : 's'} for a complete report.\n\n`
       : selectedInteractionsList.length > MAX_INTERACTIONS
-      ? `// ⚠️ WARNING: ${selectedInteractionsList.length} interactions selected, but only ${MAX_INTERACTIONS} will be used (maximum per report).\n\n`
+      ? `// WARNING: ${selectedInteractionsList.length} interactions selected, but only ${MAX_INTERACTIONS} will be used (maximum per report).\n\n`
       : '';
 
     const interactions = selectedInteractionsList.map(interaction => ({
@@ -776,7 +776,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     const userAsuId = user.asu_id;
 
     return `${warningComment}(function() {
-    console.log('🚀 Starting ASU Survey Autofill (Custom Selection)...');
+    console.log('Starting ASU Survey Autofill (Custom Selection)...');
     
     // Generated interaction data from custom selection
     const interactions = ${JSON.stringify(interactions, null, 8)};
@@ -800,21 +800,21 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         if (isProcessing) return;
         isProcessing = true;
 
-        console.log('📝 Filling Page 1...');
+        // console.log('Filling Page 1...');
         const asuIdField = document.querySelector('input[name="t_834450353"]');
         if (fillField(asuIdField, '${userAsuId}')) {
-            console.log('✅ Filled ASU ID');
+            // console.log('Filled ASU ID');
 
             setTimeout(() => {
                 const startBtn = document.querySelector('#SurveySubmitButtonElement');
                 if (startBtn) {
-                    console.log('🎯 Clicking Start button...');
+                    // console.log('Clicking Start button...');
                     startBtn.click();
                     monitorForPage2();
                 }
             }, 1000);
         } else {
-            console.log('❌ ASU ID field not found');
+            console.log('Error: ASU ID field not found');
             isProcessing = false;
         }
     }
@@ -826,10 +826,10 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
         const checkForPage2 = () => {
             attempts++;
-            console.log(\`🔍 Checking for Page 2... (attempt \${attempts})\`);
+            // console.log(\`Checking for Page 2... (attempt \${attempts})\`);
 
             if (document.querySelector('input[name="t_834450357"]')) {
-                console.log('📍 Page 2 detected! Starting autofill...');
+                console.log('Page 2 detected. Starting autofill...');
                 isProcessing = false;
                 setTimeout(() => fillPage2(), 1500);
                 return;
@@ -838,7 +838,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             if (attempts < maxAttempts) {
                 setTimeout(checkForPage2, 1000);
             } else {
-                console.log('❌ Page 2 not detected after maximum attempts');
+                console.log('Error: Page 2 not detected after maximum attempts');
                 isProcessing = false;
             }
         };
@@ -851,7 +851,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         if (isProcessing) return;
         isProcessing = true;
 
-        console.log('📝 Filling Page 2 interactions...');
+        // console.log('Filling Page 2 interactions...');
 
         // Fill required interactions (first 3)
         const requiredFields = [
@@ -860,13 +860,13 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             { idField: 't_834450361', summaryField: 't_834450362' }
         ];
 
-        console.log('📝 Filling required interactions...');
+        // console.log('Filling required interactions...');
         for (let i = 0; i < 3 && i < interactions.length; i++) {
             const idField = document.querySelector(\`input[name="\${requiredFields[i].idField}"]\`);
             const summaryField = document.querySelector(\`input[name="\${requiredFields[i].summaryField}"]\`);
 
             if (fillField(idField, interactions[i].id) && fillField(summaryField, interactions[i].summary)) {
-                console.log(\`✅ Filled required interaction \${i + 1}\`);
+                // console.log(\`Filled required interaction \${i + 1}\`);
             }
         }
 
@@ -894,7 +894,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             { idField: 't_834450401', summaryField: 't_834450402' }
         ];
         
-        console.log('📝 Filling additional interactions...');
+        // console.log('Filling additional interactions...');
         const remainingInteractions = interactions.slice(3);
         const maxAdditional = Math.min(remainingInteractions.length, 20);
         
@@ -903,7 +903,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             const summaryField = document.querySelector(\`input[name="\${additionalFields[i].summaryField}"]\`);
             
             if (fillField(idField, remainingInteractions[i].id) && fillField(summaryField, remainingInteractions[i].summary)) {
-                console.log(\`✅ Filled additional interaction \${i + 1}\`);
+                // console.log(\`Filled additional interaction \${i + 1}\`);
             }
         }
         
@@ -916,16 +916,16 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     // Function to handle radio selection and submit
     function handleRadioAndSubmit() {
         try {
-            console.log('📝 Handling radio selection...');
+            // console.log('Handling radio selection...');
 
             // Calculate if we need more interactions
             const totalFilled = Math.min(interactions.length, 23); // 3 required + 20 additional max on page 2
             const needsMore = interactions.length > 23;
 
-            console.log(\`📊 Total interactions: \${interactions.length}\`);
-            console.log(\`📊 Filled on page 2: \${totalFilled}\`);
-            console.log(\`📊 Remaining: \${Math.max(0, interactions.length - 23)}\`);
-            console.log(\`📊 Needs more pages: \${needsMore}\`);
+            console.log(\`Total interactions: \${interactions.length}\`);
+            // console.log(\`Filled on page 2: \${totalFilled}\`);
+            // console.log(\`Remaining: \${Math.max(0, interactions.length - 23)}\`);
+            // console.log(\`Needs more pages: \${needsMore}\`);
 
             // Use getElementById for IDs that start with numbers
             const radioYes = document.getElementById('834450403ID');
@@ -934,18 +934,18 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             if (needsMore && radioYes) {
                 radioYes.checked = true;
                 radioYes.dispatchEvent(new Event('change', { bubbles: true }));
-                console.log('✅ Selected "Yes" for more interactions');
+                // console.log('Selected "Yes" for more interactions');
             } else if (!needsMore && radioNo) {
                 radioNo.checked = true;
                 radioNo.dispatchEvent(new Event('change', { bubbles: true }));
-                console.log('✅ Selected "No" - all interactions fit on page 2');
+                // console.log('Selected "No" - all interactions fit on page 2');
             }
 
             // Click Next button
             setTimeout(() => {
                 const nextBtn = document.querySelector('#SurveySubmitButtonElement');
                 if (nextBtn) {
-                    console.log('🎯 Clicking Next button...');
+                    // console.log('Clicking Next button...');
                     nextBtn.click();
 
                     // Monitor for popup or next page
@@ -956,7 +956,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             }, 1000);
 
         } catch (error) {
-            console.error('❌ Error handling radio and submit:', error);
+            console.error('Error handling radio and submit:', error);
             isProcessing = false;
         }
     }
@@ -968,7 +968,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
         const checkStatus = () => {
             attempts++;
-            console.log(\`🔍 Checking for popup or next page... (attempt \${attempts})\`);
+            // console.log(\`Checking for popup or next page... (attempt \${attempts})\`);
 
             // Check for "Response Requested" dialog
             const dialogButtons = document.querySelectorAll('.modal-content .btn-modal-secondary');
@@ -982,7 +982,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             }
 
             if (continueBtn && continueBtn.offsetParent !== null) {
-                console.log('⚠️ "Response Requested" dialog detected - clicking "Continue Without Answering"...');
+                console.log('"Response Requested" dialog detected - dismissing...');
                 continueBtn.click();
 
                 // After clicking continue, check what happens next
@@ -990,7 +990,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
                     if (expectPage3) {
                         monitorForPage3();
                     } else {
-                        console.log('✅ Navigating to page 4 (final page)');
+                        console.log('Navigating to page 4');
                         isProcessing = false;
                     }
                 }, 2000);
@@ -999,7 +999,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
             // Check if we're already on page 3
             if (expectPage3 && document.querySelector('input[name="t_834450405"]')) {
-                console.log('📍 Page 3 detected! Starting autofill...');
+                console.log('Page 3 detected. Starting autofill...');
                 isProcessing = false;
                 setTimeout(() => fillPage3(), 1500);
                 return;
@@ -1007,8 +1007,8 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
             // Check if we're on page 4 or beyond (no more interactions)
             if (!expectPage3 && !document.querySelector('input[name="t_834450357"]')) {
-                console.log('✅ Successfully navigated to page 4!');
-                console.log(\`📊 Total interactions processed: \${interactions.length}\`);
+                console.log('Successfully navigated to page 4');
+                console.log(\`Total interactions processed: \${interactions.length}\`);
                 isProcessing = false;
                 return;
             }
@@ -1016,7 +1016,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             if (attempts < maxAttempts) {
                 setTimeout(checkStatus, 1000);
             } else {
-                console.log('❌ Maximum attempts reached. Please check the page manually.');
+                console.log('Error: Maximum attempts reached. Check page manually.');
                 isProcessing = false;
             }
         };
@@ -1031,10 +1031,10 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
         const checkForPage3 = () => {
             attempts++;
-            console.log(\`🔍 Checking for Page 3... (attempt \${attempts})\`);
+            // console.log(\`Checking for Page 3... (attempt \${attempts})\`);
 
             if (document.querySelector('input[name="t_834450405"]')) {
-                console.log('📍 Page 3 detected! Starting autofill...');
+                console.log('Page 3 detected. Starting autofill...');
                 isProcessing = false;
                 setTimeout(() => fillPage3(), 1500);
                 return;
@@ -1043,7 +1043,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             if (attempts < maxAttempts) {
                 setTimeout(checkForPage3, 1000);
             } else {
-                console.log('❌ Page 3 not detected after maximum attempts');
+                console.log('Error: Page 3 not detected after maximum attempts');
                 isProcessing = false;
             }
         };
@@ -1056,7 +1056,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         if (isProcessing) return;
         isProcessing = true;
 
-        console.log('📝 Filling Page 3 interactions...');
+        // console.log('Filling Page 3 interactions...');
 
         // Page 3 has interactions 21-40 (20 more slots)
         const page3Fields = [
@@ -1086,14 +1086,14 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
         const page3Interactions = interactions.slice(23);
         const maxPage3 = Math.min(page3Interactions.length, 20);
 
-        console.log(\`📝 Filling \${maxPage3} interactions on page 3...\`);
+        // console.log(\`Filling \${maxPage3} interactions on page 3...\`);
 
         for (let i = 0; i < maxPage3; i++) {
             const idField = document.querySelector(\`input[name="\${page3Fields[i].idField}"]\`);
             const summaryField = document.querySelector(\`input[name="\${page3Fields[i].summaryField}"]\`);
 
             if (fillField(idField, page3Interactions[i].id) && fillField(summaryField, page3Interactions[i].summary)) {
-                console.log(\`✅ Filled interaction \${23 + i + 1}\`);
+                // console.log(\`Filled interaction \${23 + i + 1}\`);
             }
         }
 
@@ -1106,11 +1106,11 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     // Function to handle Page 3 submit
     function handlePage3Submit() {
         try {
-            console.log('📝 Submitting Page 3...');
+            // console.log('Submitting Page 3...');
 
             const nextBtn = document.querySelector('#SurveySubmitButtonElement');
             if (nextBtn) {
-                console.log('🎯 Clicking Next button on Page 3...');
+                // console.log('Clicking Next button on Page 3...');
                 nextBtn.click();
 
                 // Monitor for popup again on page 3
@@ -1119,7 +1119,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
                 }, 2000);
             }
         } catch (error) {
-            console.error('❌ Error submitting Page 3:', error);
+            console.error('Error submitting Page 3:', error);
             isProcessing = false;
         }
     }
@@ -1131,7 +1131,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
         const checkStatus = () => {
             attempts++;
-            console.log(\`🔍 Checking for Page 3 popup or final page... (attempt \${attempts})\`);
+            // console.log(\`Checking for Page 3 popup or final page... (attempt \${attempts})\`);
 
             // Check for "Response Requested" dialog
             const dialogButtons = document.querySelectorAll('.modal-content .btn-modal-secondary');
@@ -1145,7 +1145,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             }
 
             if (continueBtn && continueBtn.offsetParent !== null) {
-                console.log('⚠️ "Response Requested" dialog detected on Page 3 - clicking "Continue Without Answering"...');
+                console.log('"Response Requested" dialog on page 3 - dismissing...');
                 continueBtn.click();
 
                 setTimeout(() => {
@@ -1158,8 +1158,8 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
             // Check if we're already on page 4 or beyond
             if (!document.querySelector('input[name="t_834450405"]') && !document.querySelector('input[name="t_834450357"]')) {
-                console.log('✅ Successfully navigated to page 4!');
-                console.log(\`📊 Total interactions processed: \${interactions.length}\`);
+                console.log('Successfully navigated to page 4');
+                console.log(\`Total interactions processed: \${interactions.length}\`);
                 isProcessing = false;
                 return;
             }
@@ -1167,7 +1167,7 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
             if (attempts < maxAttempts) {
                 setTimeout(checkStatus, 1000);
             } else {
-                console.log('❌ Maximum attempts reached. Please check the page manually.');
+                console.log('Error: Maximum attempts reached. Check page manually.');
                 isProcessing = false;
             }
         };
@@ -1191,30 +1191,30 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     // Start the autofill process
     function startAutofill() {
         const currentPage = detectCurrentPage();
-        console.log('🔍 Detecting current page...');
+        // console.log('Detecting current page...');
 
         switch(currentPage) {
             case 'page1':
-                console.log('📍 Detected Page 1');
+                console.log('Detected Page 1');
                 fillPage1();
                 break;
             case 'page2':
-                console.log('📍 Detected Page 2');
+                console.log('Detected Page 2');
                 fillPage2();
                 break;
             case 'page3':
-                console.log('📍 Detected Page 3');
+                console.log('Detected Page 3');
                 fillPage3();
                 break;
             default:
-                console.log('📍 Page not recognized or already completed');
+                console.log('Page not recognized or already completed');
                 break;
         }
     }
     
     // Initialize
     startAutofill();
-    console.log(\`✅ Autofill script initialized! Total interactions: \${interactions.length}\`);
+    console.log(\`Autofill initialized. Total interactions: \${interactions.length}\`);
 })();`;
   };
 

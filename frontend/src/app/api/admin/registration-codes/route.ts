@@ -51,7 +51,7 @@ async function validateAdminAccess() {
 
 // Generate cryptographically secure registration code
 function generateRegistrationCode(): string {
-  return crypto.randomBytes(16).toString('hex');
+  return crypto.randomBytes(6).toString('hex');
 }
 
 // GET - List all registration codes

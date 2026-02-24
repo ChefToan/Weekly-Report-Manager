@@ -102,17 +102,17 @@ async function cleanupExpiredAuth(supabase: SupabaseClient): Promise<void> {
       log.info(`[Keep-Alive] Cleaned up ${expiredSessions.length} expired sessions`);
     }
 
-    // Delete used or expired password reset tokens
+    // Delete expired password reset tokens (tokens expire in 1 hour, cleanup runs daily)
     const { data: expiredTokens, error: tokenError } = await supabase
       .from('password_reset_tokens')
       .delete()
-      .or(`used.eq.true,expires_at.lt.${now}`)
+      .lt('expires_at', now)
       .select('id');
 
     if (tokenError) {
       log.error('[Keep-Alive] Error cleaning up expired tokens', { error: tokenError.message });
     } else if (expiredTokens && expiredTokens.length > 0) {
-      log.info(`[Keep-Alive] Cleaned up ${expiredTokens.length} expired/used reset tokens`);
+      log.info(`[Keep-Alive] Cleaned up ${expiredTokens.length} expired reset tokens`);
     }
 
     // Delete expired and unused registration codes

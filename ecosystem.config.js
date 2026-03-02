@@ -1,8 +1,8 @@
 module.exports = {
   apps: [{
     name: 'weeklyreport',
-    script: 'pnpm',
-    args: 'start',
+    script: 'node',
+    args: '.next/standalone/frontend/server.js',
     cwd: '/home/ubuntu/weekly-report-site/frontend',
     instances: 1,
     exec_mode: 'fork',

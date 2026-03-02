@@ -173,8 +173,16 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
           // Fallback to date if created_at is not available
           return new Date(b.date).getTime() - new Date(a.date).getTime();
         });
+
+        // Deduplicate by interaction ID to prevent the same interaction from appearing twice
+        const seenIds = new Set<string>();
+        const uniqueData = transformedData.filter(interaction => {
+          if (!interaction.id || seenIds.has(interaction.id)) return false;
+          seenIds.add(interaction.id);
+          return true;
+        });
         
-        setAllUnsubmittedInteractions(transformedData);
+        setAllUnsubmittedInteractions(uniqueData);
       }
     } catch {
       showNotification('error', 'Error fetching unsubmitted interactions');
@@ -283,10 +291,15 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
     // Combine required and additional interactions for the autofill script (only unsubmitted)
     // Cap at MAX_INTERACTIONS (43 total: 3 required + 20 on page 2 + 20 on page 3)
+    const seenInteractionIds = new Set<string>();
     const allInteractions = [
       ...unsubmittedRequired.slice(0, 3), // Take first 3 required (only unsubmitted)
       ...unsubmittedAdditional.slice(0, 40) // Take up to 40 additional (only unsubmitted)
-    ].slice(0, MAX_INTERACTIONS);
+    ].filter(interaction => {
+      if (!interaction.id || seenInteractionIds.has(interaction.id)) return false;
+      seenInteractionIds.add(interaction.id);
+      return true;
+    }).slice(0, MAX_INTERACTIONS);
 
     const interactions = allInteractions.map(interaction => ({
       id: interaction.residentEmplId || interaction.residentId,
@@ -752,8 +765,14 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
     if (selectedInteractions.size === 0) return '';
 
     // Get selected interactions from our unsubmitted list and cap at MAX_INTERACTIONS
+    const seenSelectedIds = new Set<string>();
     const selectedInteractionsList = allUnsubmittedInteractions
-      .filter(interaction => interaction.id && selectedInteractions.has(interaction.id))
+      .filter(interaction => {
+        if (!interaction.id || !selectedInteractions.has(interaction.id)) return false;
+        if (seenSelectedIds.has(interaction.id)) return false;
+        seenSelectedIds.add(interaction.id);
+        return true;
+      })
       .slice(0, MAX_INTERACTIONS);
 
     if (selectedInteractionsList.length === 0) return '';

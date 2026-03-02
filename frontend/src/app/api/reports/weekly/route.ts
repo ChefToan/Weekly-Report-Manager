@@ -41,8 +41,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const requiredInteractions = interactions?.slice(0, 3) || [];
-    const additionalInteractions = interactions?.slice(3) || [];
+    // Deduplicate interactions with identical content (same resident, details, date)
+    // This handles cases where double-click or network retry saved the same interaction twice
+    const seen = new Set<string>();
+    const deduplicatedInteractions = (interactions || []).filter((interaction: { resident_id: string; details: string; date: string }) => {
+      const key = `${interaction.resident_id}|${interaction.details}|${interaction.date}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const requiredInteractions = deduplicatedInteractions.slice(0, 3);
+    const additionalInteractions = deduplicatedInteractions.slice(3);
 
     const formatInteractionForReport = (interaction: { id: string, residents?: { empl_id: string }, details: string, date: string, created_at?: string }) => ({
       id: interaction.id,

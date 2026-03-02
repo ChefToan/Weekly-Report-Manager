@@ -173,8 +173,25 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
           // Fallback to date if created_at is not available
           return new Date(b.date).getTime() - new Date(a.date).getTime();
         });
+
+        // Deduplicate interactions with identical content (same resident, details, and date).
+        // This handles cases where a double-click or network retry saved the same interaction twice.
+        // Keeps the most recent entry (already sorted by created_at desc) and tracks duplicate IDs.
+        const seen = new Map<string, ReportInteraction & { duplicateIds?: string[] }>();
+        const deduplicatedData: (ReportInteraction & { duplicateIds?: string[] })[] = [];
+        for (const interaction of transformedData) {
+          const contentKey = `${interaction.residentId}|${interaction.details}|${interaction.date}`;
+          if (!seen.has(contentKey)) {
+            const entry = { ...interaction, duplicateIds: [interaction.id!] };
+            seen.set(contentKey, entry);
+            deduplicatedData.push(entry);
+          } else {
+            // Track the duplicate ID so it can also be marked as submitted later
+            seen.get(contentKey)!.duplicateIds!.push(interaction.id!);
+          }
+        }
         
-        setAllUnsubmittedInteractions(transformedData);
+        setAllUnsubmittedInteractions(deduplicatedData);
       }
     } catch {
       showNotification('error', 'Error fetching unsubmitted interactions');
@@ -1231,10 +1248,20 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
   const markAsSubmitted = async () => {
     if (!report) return;
 
-    const allInteractionIds = [
-      ...report.requiredInteractions,
-      ...report.additionalInteractions
-    ].map(interaction => interaction.id).filter(Boolean);
+    // Collect all interaction IDs including any duplicate IDs
+    const allInteractionIds: string[] = [];
+    [...report.requiredInteractions, ...report.additionalInteractions].forEach(interaction => {
+      if (interaction.id) allInteractionIds.push(interaction.id);
+      // Also include duplicate IDs so hidden duplicates get marked as submitted too
+      const match = allUnsubmittedInteractions.find(u => u.id === interaction.id) as (ReportInteraction & { duplicateIds?: string[] }) | undefined;
+      if (match?.duplicateIds) {
+        match.duplicateIds.forEach(dupId => {
+          if (dupId !== interaction.id && !allInteractionIds.includes(dupId)) {
+            allInteractionIds.push(dupId);
+          }
+        });
+      }
+    });
 
     if (allInteractionIds.length === 0) {
       showNotification('error', 'No interactions to mark as submitted');
@@ -1274,11 +1301,23 @@ export default function WeeklyReportGenerator({ onInteractionUpdate }: WeeklyRep
 
     setSubmitting(true);
 
+    // Collect selected IDs plus any duplicate IDs
+    const allIds: string[] = [];
+    selectedInteractions.forEach(id => {
+      allIds.push(id);
+      const match = allUnsubmittedInteractions.find(u => u.id === id) as (ReportInteraction & { duplicateIds?: string[] }) | undefined;
+      if (match?.duplicateIds) {
+        match.duplicateIds.forEach(dupId => {
+          if (!allIds.includes(dupId)) allIds.push(dupId);
+        });
+      }
+    });
+
     try {
       const response = await fetch('/api/reports/weekly', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ interactionIds: Array.from(selectedInteractions) }),
+        body: JSON.stringify({ interactionIds: allIds }),
       });
 
       if (response.ok) {

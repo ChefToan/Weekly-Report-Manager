@@ -134,9 +134,11 @@ async function cleanupExpiredAuth(supabase: SupabaseClient): Promise<void> {
 }
 
 /**
- * Main keep-alive function that fetches and saves data
+ * Main keep-alive function that fetches and saves data.
+ * @param forceRun - If true, always fetch a photo regardless of last fetch time (used on startup).
+ *                   If false, only fetch if it's been more than 12 hours since the last fetch (used by cron).
  */
-async function keepDatabaseActive(): Promise<void> {
+async function keepDatabaseActive(forceRun = false): Promise<void> {
   if (isRunning) {
     log.info('[Keep-Alive] Skipping - already running');
     return;
@@ -149,7 +151,7 @@ async function keepDatabaseActive(): Promise<void> {
 
   isRunning = true;
   const startTime = Date.now();
-  log.info('[Keep-Alive] Starting keep-alive process');
+  log.info('[Keep-Alive] Starting keep-alive process', { forceRun });
 
   try {
     const supabase = createClient(
@@ -178,16 +180,19 @@ async function keepDatabaseActive(): Promise<void> {
     const lastFetchTime = lastPhoto ? new Date(lastPhoto.fetched_at) : null;
     const hoursSinceLastFetch = lastFetchTime
       ? (now.getTime() - lastFetchTime.getTime()) / (1000 * 60 * 60)
-      : 25;
+      : Infinity;
 
-    log.info(`[Keep-Alive] Hours since last photo fetch: ${hoursSinceLastFetch.toFixed(2)}`);
+    log.info(`[Keep-Alive] Hours since last photo fetch: ${hoursSinceLastFetch === Infinity ? 'never' : hoursSinceLastFetch.toFixed(2)}`);
 
-    // Only fetch a new photo if it's been more than 24 hours
-    if (hoursSinceLastFetch < 24) {
-      log.info(`[Keep-Alive] Skipping photo fetch - last fetch was ${hoursSinceLastFetch.toFixed(2)} hours ago`);
+    // On startup (forceRun), always fetch to guarantee DB activity.
+    // On cron runs, skip if fetched within the last 12 hours to avoid excessive writes.
+    if (!forceRun && hoursSinceLastFetch < 12) {
+      log.info(`[Keep-Alive] Skipping photo fetch - last fetch was ${hoursSinceLastFetch.toFixed(2)} hours ago (cron will retry later)`);
       isRunning = false;
       return;
     }
+
+    log.info(`[Keep-Alive] Fetching new photo...${forceRun ? ' (startup)' : ' (scheduled)'}`);
 
     // Fetch image from APIs
     const result = await fetchImageFromAPIs();
@@ -237,12 +242,13 @@ export function startKeepAlive(): void {
   }
 
   log.info('[Keep-Alive] Starting keep-alive service');
-  keepDatabaseActive().catch((err) => log.error('[Keep-Alive] Initial run error', { error: String(err) }));
+  // Always fetch on startup to guarantee DB activity
+  keepDatabaseActive(true).catch((err) => log.error('[Keep-Alive] Initial run error', { error: String(err) }));
 
   // Schedule to run every 24 hours at 12:00 AM Arizona Time
   cronJob = cron.schedule('0 0 0 * * *', () => {
     log.info('[Keep-Alive] Scheduled execution triggered');
-    keepDatabaseActive().catch((err) => log.error('[Keep-Alive] Scheduled run error', { error: String(err) }));
+    keepDatabaseActive(false).catch((err) => log.error('[Keep-Alive] Scheduled run error', { error: String(err) }));
   }, {
     timezone: "America/Phoenix"
   });
